@@ -11,11 +11,14 @@ import threading
 import time
 import sys
 import hashlib
+import shutil
 from pathlib import Path
 from uuid import uuid4
 
 from .jobs import atomic_json
-from .lab_project import LabProject, digest, now
+from .lab_project import LabProject, digest, now, pdf_pages, scanned_guidance_error
+from .paperfox_setup import settings_path
+from .word_material import GUIDES, word_pages
 
 PHASES = [('materials', '接收材料'), ('planning', '理解要求'), ('execution', '执行实验'),
           ('structure', '组织图文'), ('writing', '撰写报告'), ('formatting', '排版检查'), ('ready', '阅读与改稿')]
@@ -106,7 +109,6 @@ def create_project(workspace, data):
         # LabProject preserves source basenames in its input inventory.
         named = path.parent / (path.stem + '-named') / record['name']
         named.parent.mkdir(exist_ok=True)
-        import shutil
         shutil.copyfile(path, named)
         sources.append({'path': str(named), 'role': item.get('role', 'data')})
         uploaded.append((path, named, record))
@@ -131,7 +133,8 @@ def create_project(workspace, data):
     if execution:p.data['execution']=execution
     p.data['use_default_report_template']=True
     p.data['report_first_pass']=True
-    p.data['report_total_budget_cny']=3.0
+    if settings_path() is None:
+        p.data['report_total_budget_cny']=3.0
     p.data['studio'] = {'mode': mode, 'archived': False, 'starred': False, 'created_at': now(), 'phase': 'materials'}
     if data.get('validation_origin'):p.data['validation_origin'] = data['validation_origin']
     p.note('材料已接收，已建立独立报告项目', files=len(p.data['materials']))
@@ -145,6 +148,53 @@ def create_project(workspace, data):
         record.update(consumed_by=p.id, consumed_at=now())
         atomic_json(path.with_name(path.name + '.meta.json'), record)
     return p
+
+
+def replaceable_guidance(project):
+    data = project.data
+    workflow = data.get('report_workflow', {})
+    error = workflow.get('error', data.get('last_error', ''))
+    if (data.get('studio', {}).get('mode') != 'report' or data.get('report')
+            or workflow.get('stage', 'intake') != 'intake'
+            or workflow.get('outputs') or workflow.get('pending')
+            or data.get('material_library', {}).get('status') == 'organized'):
+        return None
+    for material in data['materials']:
+        if (material['role'] == 'guidance' and not material.get('library_source_id')
+                and error == 'ValueError: ' + scanned_guidance_error(material['name'])):
+            return material
+    return None
+
+
+def replace_guidance(project, raw_path):
+    current = replaceable_guidance(project)
+    if current is None:
+        raise ValueError('目前没有需要更换的扫描版指导书')
+    source = Path(raw_path).expanduser().resolve()
+    suffix = source.suffix.lower()
+    if suffix not in GUIDES or not source.is_file() or source.name.lower().startswith('.env'):
+        raise ValueError('请选择可读取的 PDF、DOC 或 DOCX 指导书')
+    target = project.file(f'inputs/guide-{uuid4().hex[:8]}-{source.name}')
+    try:
+        shutil.copy2(source, target)
+        pages = pdf_pages(target) if suffix == '.pdf' else word_pages(target)
+        if not any(page['text'].strip() for page in pages):
+            raise ValueError(f'{source.name} 是扫描件，请选择带正文的 Word 文件或经过 OCR 的 PDF。')
+        replacement = {'id': current['id'], 'role': 'guidance', 'name': source.name,
+                       'original': str(source), 'path': target.relative_to(project.root).as_posix(),
+                       'sha256': digest(target), 'bytes': target.stat().st_size}
+    except Exception:
+        target.unlink(missing_ok=True)
+        raise
+    data = project.data
+    data['materials'][data['materials'].index(current)] = replacement
+    data.setdefault('superseded_guidance', []).append(current)
+    if data.get('material_library'):
+        data.pop('report_sources', None)
+    data.update(status='ready', last_error='')
+    if workflow := data.get('report_workflow'):
+        workflow.update(status='ready', error='')
+    project.note('已更换实验指导书', previous=current['name'], current=source.name)
 
 
 def prepare_executed_report(p):
@@ -191,6 +241,11 @@ class StudioRunner:
         options.setdefault('max_steps',400);options.setdefault('max_cost',5.0);options.setdefault('max_seconds',7200)
         if self.model_factory:options['model_factory'] = self.model_factory
         try:
+            if (settings_path() is not None and p.data.get('studio', {}).get('mode') == 'report'
+                    and p.data.get('report_total_budget_cny') == 3.0):
+                # Older Windows workbench builds stored the default as a hard CNY cap.
+                p.data.pop('report_total_budget_cny')
+                p.save()
             if p.data.get('studio',{}).get('mode') == 'execute' and not p.data.get('report_sources'):
                 p.data['studio']['phase'] = 'execution';p.save()
                 self.current = LabPipeline(p, **options)
@@ -256,6 +311,7 @@ def progress(project, busy=False):
         seen_previews.add(raw);previews.append({'path':raw,'name':Path(raw).name})
         if len(previews)==4:break
     return {'id':p['id'],'title':p['title'],'busy':busy,'status':state,'phase':PHASES[index][0],
+        'can_replace_guidance':not busy and replaceable_guidance(project) is not None,
         'phase_index':index,'percent':max(0,min(100,percent)),'phases':[{'id':k,'name':'使用已有结果' if k=='execution' and p.get('studio',{}).get('mode')=='report' else n,
             'state':'done' if i<index else 'current' if i==index else 'pending'} for i,(k,n) in enumerate(PHASES)],
         'stage':raw_stage,'detail':detail,'tasks':tasks,'activity':activity,'questions':questions,

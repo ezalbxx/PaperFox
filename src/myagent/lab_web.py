@@ -220,6 +220,12 @@ def post_lab(hub, workspace, route, data):
             p.note('已更新报告管理信息',action=action)
             return {'saved':True}
         return hub.mutate(workspace,data['project'],manage)
+    if route == '/api/lab/studio/replace-guidance':
+        from .studio_workspace import replace_guidance
+        pid = data['project']
+        with hub.lock:
+            hub.mutate(workspace, pid, lambda project: replace_guidance(project, data['path']))
+            return hub.start(workspace, pid, {'action': 'studio'})
     if route=='/api/lab/studio/reply':
         p=LabProject(workspace,data['project'])
         if p.data.get('report_workflow'):

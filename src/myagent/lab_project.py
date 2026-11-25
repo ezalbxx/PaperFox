@@ -22,6 +22,17 @@ def digest(path):
     return hashlib.sha256(Path(path).read_bytes()).hexdigest()
 
 
+def pdf_pages(path):
+    import fitz
+
+    with fitz.open(path) as pdf:
+        return [{'page': i, 'text': page.get_text()} for i, page in enumerate(pdf, 1)]
+
+
+def scanned_guidance_error(name):
+    return f'{name}是扫描件，本初版需要可提取文字的PDF'
+
+
 def task_generation(project, task_id):
     return next((t.get('plan_generation',0) for t in project.data['tasks'] if t['id']==task_id),0)
 
@@ -164,7 +175,6 @@ class LabProject:
         return resolve_workspace_path(self.root, raw)
 
     def extract(self):
-        import fitz
         texts = []
         for item in self.data['materials']:
             # Previous reports are comparison references, never new experimental observations.
@@ -174,12 +184,11 @@ class LabProject:
             if path.is_dir():
                 continue
             if path.suffix.lower() == '.pdf':
-                with fitz.open(path) as doc:
-                    pages = [{'page': i + 1, 'text': p.get_text()} for i, p in enumerate(doc)]
+                pages = pdf_pages(path)
                 item['pages'] = len(pages)
                 item['empty_pages'] = [p['page'] for p in pages if not p['text'].strip()]
                 if not any(p['text'].strip() for p in pages) and item['role'] == 'guidance':
-                    raise ValueError(f'{item["name"]}是扫描件，本初版需要可提取文字的PDF')
+                    raise ValueError(scanned_guidance_error(item['name']))
                 texts.append({'material_id': item['id'], 'role': item['role'], 'path': item['path'], 'pages': pages})
             elif item['role'] in ('guidance','template') and path.suffix.lower() in WORD:
                 pages = word_pages(path, self.root/'extracted')

@@ -13,6 +13,8 @@
 3. 输入自己的 [DeepSeek API Key](https://platform.deepseek.com/api_keys)，点击「验证并保存」。
 4. 新建实验报告，选择实验材料文件夹和指导书。有单独的报告模板时，可以再上传模板。点击「开始制作」，完成后下载 PDF。
 
+升级时，关闭旧版进程后从新目录启动。工作台会打开原有的本机报告库。扫描版指导书读取失败时，在原报告的制作进度页点击「更换指导书并继续」，选择带正文的 Word 文件或经过 OCR 的 PDF。
+
 指导书支持可提取文本的 PDF 和 DOCX。旧版 DOC 需要本机安装 Microsoft Word，也可以先转成 DOCX。扫描版 PDF 需要先做 OCR。安装 [Tectonic](https://tectonic-typesetting.github.io/) 并加入 PATH 后，可使用 LaTeX 排版。未安装时，程序使用内置 PDF 排版。
 
 ## 数据与 API

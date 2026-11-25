@@ -76,6 +76,7 @@ def index_library(project):
     records=[];seen={};errors=[]
     designated = {m.get('sha256') for m in p.data['materials']
                   if m['role'] in ('guidance', 'template', 'reference')}
+    designated.update(m['sha256'] for m in p.data.get('superseded_guidance', []))
     with sqlite3.connect(db) as conn:
         conn.execute('CREATE TABLE IF NOT EXISTS passages (source_id TEXT, anchor TEXT, text TEXT)')
         conn.execute('DELETE FROM passages')

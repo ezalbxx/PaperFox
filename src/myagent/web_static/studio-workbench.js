@@ -77,7 +77,9 @@ function wrenderProgress(p){
  if(p.report?.pdf){pdf.href=wfile(p.report.pdf,true);pdf.download=p.title+'.pdf';}else pdf.removeAttribute('href');
  wq('journeyPhases').replaceChildren(...p.phases.map((phase,i)=>{const li=wn('li',undefined,phase.state);li.append(wn('span',phase.state==='done'?'✓':String(i+1),'phase-number'),wn('span',phase.name));if(phase.state==='current')li.setAttribute('aria-current','step');return li;}));
  const productionIssues=(p.issues||[]).filter(i=>i.severity==='major');
- const productionError=/\u5df2\u6682\u505c\u6a21\u578b\u54cd\u5e94|\u7528\u6237\u6682\u505c/.test(p.error)?'':p.error;
+ const productionError=p.can_replace_guidance?'当前指导书没有可提取的正文。请选择带正文的 Word 文件或经过 OCR 的 PDF。':/\u5df2\u6682\u505c\u6a21\u578b\u54cd\u5e94|\u7528\u6237\u6682\u505c/.test(p.error)?'':p.error;
+ wq('replaceGuidance').hidden=!p.can_replace_guidance;
+ if(p.can_replace_guidance)wq('resumeProduction').hidden=true;
  const productionMessages=[productionError,...productionIssues.map(i=>'\u2022 '+i.reason+'\n'+i.suggestion)].filter(Boolean);
  wq('productionError').hidden=!productionMessages.length;wq('productionError').textContent=productionMessages.join('\n\n');
  const reply=wq('productionReply');reply.hidden=p.busy||(!p.questions.length&&!p.pending_checkpoint);const pendingKey=p.pending_id||p.questions.map(q=>q.question).join('|');if(reply.dataset.pending!==pendingKey){reply.dataset.pending=pendingKey;wq('productionAnswer').value='';}wq('productionQuestions').replaceChildren(...p.questions.map(q=>wn('p',q.question)));if(p.pending_checkpoint&&!p.questions.length)wq('productionQuestions').append(wn('p','这一步等待你的意见。可以写下修改方向，或填写“认可”继续。'));
@@ -170,6 +172,19 @@ async function wpick(kind){
 }
 wq('chooseLocalLibrary').onclick=()=>wpick('folder');
 wq('chooseGuide').onclick=()=>wpick('guidance');
+wq('replaceGuidance').onclick=async()=>{
+ const button=wq('replaceGuidance'), selected=project;
+ button.disabled=true;
+ try{
+  const file=await post('/api/pick',{kind:'guidance'});
+  if(!file.path||project!==selected)return;
+  await wrequest('studio/replace-guidance',{project:selected,path:file.path});
+  await wrefresh();
+ }catch(e){
+  wq('productionError').textContent=e.message||String(e);
+  wq('productionError').hidden=false;
+ }finally{button.disabled=false;}
+};
 wq('openPaperfoxSetup').onclick=wopenSetup;
 wq('closePaperfoxSetup').onclick=()=>wq('paperfoxSetupDialog').close();
 wq('paperfoxSetupDialog').addEventListener('close',()=>{wq('paperfoxApiKey').value='';});
