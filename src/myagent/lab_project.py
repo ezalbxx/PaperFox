@@ -12,21 +12,19 @@ import sys
 from pathlib import Path
 from uuid import uuid4
 
-from .word_material import GUIDES, WORD, word_pages
+from .guidance_material import guidance_pages, pdf_pages
+from .word_material import WORD, word_pages
 from .jobs import atomic_json
 from .task_state import now
 from .tools.base import resolve_workspace_path
 
 
+def is_secret_material(path):
+    return path.name.lower().startswith('.env') or path.suffix.lower() in {'.key', '.pem', '.pfx', '.p12'}
+
+
 def digest(path):
     return hashlib.sha256(Path(path).read_bytes()).hexdigest()
-
-
-def pdf_pages(path):
-    import fitz
-
-    with fitz.open(path) as pdf:
-        return [{'page': i, 'text': page.get_text()} for i, page in enumerate(pdf, 1)]
 
 
 def scanned_guidance_error(name):
@@ -77,15 +75,13 @@ class LabProject:
             role = item.get('role', 'data')
             if role not in ('guidance', 'data', 'template', 'reference', 'library') or not (path.is_file() or (role in ('data','library') and path.is_dir())):
                 raise ValueError(f'无效材料: {path}')
-            if path.name.lower().startswith('.env'):
+            if is_secret_material(path):
                 raise ValueError('密钥文件不作为实验材料')
-            if role == 'guidance' and path.suffix.lower() not in GUIDES:
-                raise ValueError('指导书支持 PDF、DOC 和 DOCX')
             if role == 'template' and path.suffix.lower() not in ('.pdf', '.txt', '.md', '.json', '.doc', '.docx'):
                 raise ValueError('模板支持 PDF、DOC、DOCX、TXT、Markdown 或 JSON')
             sources.append((path, role))
         if not any(role in ('guidance','library') for _, role in sources):
-            raise ValueError('至少提供一份 PDF 或 Word 指导书')
+            raise ValueError('至少提供一份实验指导书')
         pid = uuid4().hex[:12]
         root = ws / 'experiments' / pid
         (root / 'inputs').mkdir(parents=True)
@@ -98,8 +94,7 @@ class LabProject:
                     for name in names:
                         entry = Path(folder) / name
                         if (name.lower() in {'.git', '.venv', 'node_modules', '__pycache__'}
-                                or name.lower().startswith('.env')
-                                or entry.suffix.lower() in {'.key', '.pem', '.pfx', '.p12'}
+                                or is_secret_material(entry)
                                 or entry.is_symlink()
                                 or getattr(entry, 'is_junction', lambda: False)()
                                 or entry.resolve() == root):
@@ -183,14 +178,17 @@ class LabProject:
             path = self.file(item['path'])
             if path.is_dir():
                 continue
-            if path.suffix.lower() == '.pdf':
+            if item['role'] == 'guidance':
+                pages = guidance_pages(path, self.root/'extracted', name=item['name'])
+                item['pages'] = len(pages)
+                item['empty_pages'] = [p['page'] for p in pages if not p['text'].strip()]
+                texts.append({'material_id': item['id'], 'role': 'guidance', 'path': item['path'], 'pages': pages})
+            elif path.suffix.lower() == '.pdf':
                 pages = pdf_pages(path)
                 item['pages'] = len(pages)
                 item['empty_pages'] = [p['page'] for p in pages if not p['text'].strip()]
-                if not any(p['text'].strip() for p in pages) and item['role'] == 'guidance':
-                    raise ValueError(scanned_guidance_error(item['name']))
                 texts.append({'material_id': item['id'], 'role': item['role'], 'path': item['path'], 'pages': pages})
-            elif item['role'] in ('guidance','template') and path.suffix.lower() in WORD:
+            elif item['role'] == 'template' and path.suffix.lower() in WORD:
                 pages = word_pages(path, self.root/'extracted')
                 item['pages'] = len(pages)
                 texts.append({'material_id':item['id'],'role':item['role'],'path':item['path'],'pages':pages})

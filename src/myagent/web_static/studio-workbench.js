@@ -77,7 +77,7 @@ function wrenderProgress(p){
  if(p.report?.pdf){pdf.href=wfile(p.report.pdf,true);pdf.download=p.title+'.pdf';}else pdf.removeAttribute('href');
  wq('journeyPhases').replaceChildren(...p.phases.map((phase,i)=>{const li=wn('li',undefined,phase.state);li.append(wn('span',phase.state==='done'?'✓':String(i+1),'phase-number'),wn('span',phase.name));if(phase.state==='current')li.setAttribute('aria-current','step');return li;}));
  const productionIssues=(p.issues||[]).filter(i=>i.severity==='major');
- const productionError=p.can_replace_guidance?'当前指导书没有可提取的正文。请选择带正文的 Word 文件或经过 OCR 的 PDF。':/\u5df2\u6682\u505c\u6a21\u578b\u54cd\u5e94|\u7528\u6237\u6682\u505c/.test(p.error)?'':p.error;
+ const productionError=/\u5df2\u6682\u505c\u6a21\u578b\u54cd\u5e94|\u7528\u6237\u6682\u505c/.test(p.error)?'':p.error.replace(/^(?:ValueError|GuidanceReadError): /,'');
  wq('replaceGuidance').hidden=!p.can_replace_guidance;
  if(p.can_replace_guidance)wq('resumeProduction').hidden=true;
  const productionMessages=[productionError,...productionIssues.map(i=>'\u2022 '+i.reason+'\n'+i.suggestion)].filter(Boolean);
@@ -118,7 +118,7 @@ function wuploadRender(){
 function waddFiles(files){
  if(wb.creating)return;
  for(const file of files){if(wb.uploads.some(f=>f.file.name===file.name&&f.file.size===file.size))continue;
-  const isGuide=/\.(pdf|docx?)$/i.test(file.name),template=/模板|template/i.test(file.name),role=template?'template':isGuide&&!wb.uploads.some(f=>f.role==='guidance')?'guidance':'data';wb.uploads.push({file,role,loaded:0});
+  const isGuide=/\.(pdf|docx?|pptx?)$/i.test(file.name),template=/模板|template/i.test(file.name)&&/\.(pdf|docx?|txt|md|json)$/i.test(file.name),role=template?'template':isGuide&&!wb.guidePath&&!wb.uploads.some(f=>f.role==='guidance')?'guidance':'data';wb.uploads.push({file,role,loaded:0});
  }if(!wq('reportTitleInput').value&&wb.uploads.length)wq('reportTitleInput').value=wb.uploads[0].file.name.replace(/\.[^.]+$/,'').replace(/指导书|指导书籍/,'').replace(/[_-]+$/,'');wuploadRender();
 }
 function wsendFile(file){return new Promise((resolve,reject)=>{
@@ -127,7 +127,7 @@ function wsendFile(file){return new Promise((resolve,reject)=>{
 async function wcreate(e){e.preventDefault();if(wb.creating)return;wq('createReportError').hidden=true;
  const mode='report';
  if(!wb.uploads.some(f=>f.role==='data')&&!wb.libraryPath){wq('createReportError').textContent='先放入指导书和实验材料，再开始这一稿。';wq('createReportError').hidden=false;return;}
- if(!wb.guidePath&&!wb.uploads.some(f=>f.role==='guidance')){wq('createReportError').textContent='请选择一份 PDF、DOC 或 DOCX，将用途设为“实验指导书”。';wq('createReportError').hidden=false;return;}
+ if(!wb.guidePath&&!wb.uploads.some(f=>f.role==='guidance')){wq('createReportError').textContent='请选择指导书文件，或在上传的文件旁将用途设为“实验指导书”。';wq('createReportError').hidden=false;return;}
  wb.creating=true;wq('createReportSubmit').disabled=true;wq('closeCreateReport').disabled=true;wq('createReportSubmit').textContent='正在接收材料…';wuploadRender();
  try{for(const file of wb.uploads){if(file.token)continue;try{await wsendFile(file);}catch(e){file.error=e.message;wuploadRender();throw e;}}
   wq('createReportSubmit').textContent='正在建立报告…';const result=await wrequest('studio/create',{request_id:wb.batch,title:wq('reportTitleInput').value,mode,guidance_path:wb.guidePath,files:wb.uploads.map(f=>({token:f.token,role:f.role})),library_path:wb.libraryPath,student_id:wq('newReportStudentId').value,student:{name:wq('newReportStudentName').value},instructions:wq('reportInstructionsInput').value});

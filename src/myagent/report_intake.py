@@ -3,7 +3,8 @@ from collections import defaultdict
 from pathlib import Path
 
 from .jobs import atomic_json
-from .lab_project import LabProject, digest, now, pdf_pages, scanned_guidance_error
+from .guidance_material import guidance_pages
+from .lab_project import LabProject, digest, now
 
 
 def prepare_report(project):
@@ -21,10 +22,8 @@ def prepare_report(project):
     if 'report_sources' in p.data:return
     if any(m['role']=='library' for m in p.data['materials']):
         for material in p.data['materials']:
-            path = p.file(material['path'])
-            if material['role'] == 'guidance' and path.suffix.lower() == '.pdf':
-                if not any(page['text'].strip() for page in pdf_pages(path)):
-                    raise ValueError(scanned_guidance_error(material['name']))
+            if material['role'] == 'guidance':
+                guidance_pages(p.file(material['path']), p.root/'extracted', name=material['name'])
         from .report_library import index_library
         index_library(p)
         p.data['report_import']={'at':now(),'source':'mixed material library','no_execution':True}

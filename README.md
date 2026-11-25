@@ -15,9 +15,11 @@
 
 升级或删除程序前，点击工作台左下角的电源图标，选择「退出程序」。如果有报告正在制作，先暂停并等待进度保存。升级后，工作台会打开原有的本机报告库。
 
-扫描版指导书读取失败时，在原报告的制作进度页点击「更换指导书并继续」，选择带正文的 Word 文件或经过 OCR 的 PDF。
+「选择实验指导书」可浏览所有文件。常用格式包括 PDF、Word、PowerPoint、截图或照片，以及 UTF-8 纯文本。多张截图可拖入上传区，逐张将用途设为「实验指导书」。图片文字在本机通过 [RapidOCR](https://github.com/RapidAI/RapidOCR) 提取，写报告时识别出的正文按普通材料处理。
 
-指导书支持可提取文本的 PDF 和 DOCX。旧版 DOC 需要本机安装 Microsoft Word，也可以先转成 DOCX。扫描版 PDF 需要先做 OCR。安装 [Tectonic](https://tectonic-typesetting.github.io/) 并加入 PATH 后，可使用 LaTeX 排版。未安装时，程序使用内置 PDF 排版。
+PPTX 可直接读取，包括幻灯片内嵌的常见图片。旧版 DOC、PPT 分别需要本机安装 Microsoft Word、PowerPoint。纯扫描 PDF 可先做 OCR，也可将页面截图选为指导书。文件读取失败时，可在原报告的制作进度页点击「更换指导书并继续」。
+
+安装 [Tectonic](https://tectonic-typesetting.github.io/) 并加入 PATH 后，可使用 LaTeX 排版。未安装时，程序使用内置 PDF 排版。
 
 ## 数据与 API
 

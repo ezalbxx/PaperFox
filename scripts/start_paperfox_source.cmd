@@ -10,10 +10,10 @@ if not exist "%PAPERFOX_PYTHON%" (
         if errorlevel 1 goto failed
     )
 )
-if not exist ".venv\paperfox-installed" (
+if not exist ".venv\paperfox-guidance-installed" (
     "%PAPERFOX_PYTHON%" -m pip install --no-cache-dir ".[paperfox]"
     if errorlevel 1 goto failed
-    type nul > ".venv\paperfox-installed"
+    type nul > ".venv\paperfox-guidance-installed"
 )
 set "PYTHONPATH=%CD%\src"
 "%PAPERFOX_PYTHON%" scripts\paperfox_windows.py %*

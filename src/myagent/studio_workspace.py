@@ -16,8 +16,8 @@ from pathlib import Path
 from uuid import uuid4
 
 from .jobs import atomic_json
-from .lab_project import LabProject, digest, now, pdf_pages, scanned_guidance_error
-from .word_material import GUIDES, word_pages
+from .guidance_material import guidance_pages
+from .lab_project import LabProject, digest, is_secret_material, now, scanned_guidance_error
 
 PHASES = [('materials', '接收材料'), ('planning', '理解要求'), ('execution', '执行实验'),
           ('structure', '组织图文'), ('writing', '撰写报告'), ('formatting', '排版检查'), ('ready', '阅读与改稿')]
@@ -57,7 +57,7 @@ def receive_upload(workspace, params, stream, size):
     if not batch or len(batch) > 64 or any(c not in '0123456789abcdef-' for c in batch):
         raise ValueError('无效的上传批次，请重新选择文件')
     name = params.get('name', '').replace('\\', '/').split('/')[-1]
-    if not name or name in ('.', '..') or name.lower().startswith('.env'):
+    if not name or name in ('.', '..') or is_secret_material(Path(name)):
         raise ValueError('请选择实验文件，密钥文件不能作为材料')
     if size <= 0 or size > 256 * 1024 * 1024:
         raise ValueError('单文件需介于1字节与256MB之间；大数据请使用本机材料目录')
@@ -158,7 +158,8 @@ def replaceable_guidance(project):
         return None
     for material in data['materials']:
         if (material['role'] == 'guidance' and not material.get('library_source_id')
-                and error == 'ValueError: ' + scanned_guidance_error(material['name'])):
+                and (error == 'ValueError: ' + scanned_guidance_error(material['name'])
+                     or error.startswith(f'GuidanceReadError: 无法读取指导书「{material["name"]}」。'))):
             return material
     return None
 
@@ -166,17 +167,14 @@ def replaceable_guidance(project):
 def replace_guidance(project, raw_path):
     current = replaceable_guidance(project)
     if current is None:
-        raise ValueError('目前没有需要更换的扫描版指导书')
+        raise ValueError('目前没有需要更换的指导书')
     source = Path(raw_path).expanduser().resolve()
-    suffix = source.suffix.lower()
-    if suffix not in GUIDES or not source.is_file() or source.name.lower().startswith('.env'):
-        raise ValueError('请选择可读取的 PDF、DOC 或 DOCX 指导书')
+    if not source.is_file() or is_secret_material(source):
+        raise ValueError('请选择可读取的指导书文件')
     target = project.file(f'inputs/guide-{uuid4().hex[:8]}-{source.name}')
     try:
         shutil.copy2(source, target)
-        pages = pdf_pages(target) if suffix == '.pdf' else word_pages(target)
-        if not any(page['text'].strip() for page in pages):
-            raise ValueError(f'{source.name} 是扫描件，请选择带正文的 Word 文件或经过 OCR 的 PDF。')
+        guidance_pages(target, project.root/'extracted', name=source.name)
         replacement = {'id': current['id'], 'role': 'guidance', 'name': source.name,
                        'original': str(source), 'path': target.relative_to(project.root).as_posix(),
                        'sha256': digest(target), 'bytes': target.stat().st_size}

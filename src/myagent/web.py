@@ -245,8 +245,7 @@ class WisdomHandler(BaseHTTPRequestHandler):
                     if data.get("kind") == "folder":
                         selected = filedialog.askdirectory(title="选择实验材料目录", initialdir=initial, mustexist=True)
                     elif data.get("kind") == "guidance":
-                        selected = filedialog.askopenfilename(title="选择实验指导书", initialdir=initial,
-                                    filetypes=[("实验指导书", "*.pdf *.doc *.docx")])
+                        selected = filedialog.askopenfilename(title="选择实验指导书", initialdir=initial)
                     else:
                         selected = filedialog.askopenfilename(title="选择要引用的项目文件", initialdir=initial)
                 finally:

@@ -9,15 +9,19 @@ import json
 import io
 import re
 import sqlite3
+from contextlib import closing
 from pathlib import Path
 
 from .jobs import atomic_json
 from .lab_project import digest,now
+from .guidance_material import SLIDES, guidance_pages, slide_pages
 
 
 TEXT={'.txt','.md','.csv','.json','.jsonl','.log','.py','.ipynb','.r','.m','.js','.ts','.yaml','.yml','.toml','.tex','.html','.xml','.sql','.c','.cpp','.h'}
 IMAGES={'.png','.jpg','.jpeg','.svg','.webp','.bmp'}
-from .word_material import GUIDES as DOCUMENTS, WORD, word_pages
+from .word_material import GUIDES, WORD, word_pages
+
+DOCUMENTS = GUIDES | SLIDES
 
 
 def passages(path, cache=None):
@@ -29,9 +33,11 @@ def passages(path, cache=None):
                 text=page.get_text()
                 for start in range(0,len(text),4000):
                     yield {'page':number,'start_char':start,'text':text[start:start+4000]}
-    elif path.suffix.lower() in WORD:
+    elif path.suffix.lower() in WORD | SLIDES:
         offset=0
-        for page in word_pages(path,cache):
+        pages = (word_pages(path,cache) if path.suffix.lower() in WORD else
+                 guidance_pages(path,cache) if cache is not None else slide_pages(path))
+        for page in pages:
             text=page['text']
             for start in range(0,len(text),4000):
                 yield {**page,'start_char':offset+start,'text':text[start:start+4000]}
@@ -77,7 +83,7 @@ def index_library(project):
     designated = {m.get('sha256') for m in p.data['materials']
                   if m['role'] in ('guidance', 'template', 'reference')}
     designated.update(m['sha256'] for m in p.data.get('superseded_guidance', []))
-    with sqlite3.connect(db) as conn:
+    with closing(sqlite3.connect(db)) as conn, conn:
         conn.execute('CREATE TABLE IF NOT EXISTS passages (source_id TEXT, anchor TEXT, text TEXT)')
         conn.execute('DELETE FROM passages')
         for material in list(p.data['materials']):
@@ -159,7 +165,7 @@ def search(project,query,category=None,limit=12):
     if not terms:terms={query.lower()}
     by_id={r['id']:r for r in project.data['report_sources'] if not category or r['category']==category}
     hits=[]
-    with sqlite3.connect(project.root/'material-library.sqlite3') as conn:
+    with closing(sqlite3.connect(project.root/'material-library.sqlite3')) as conn:
         # Coarse SQL candidate selection keeps Python ranking off unrelated passages.
         clauses=' OR '.join('instr(lower(text),?)>0' for _ in terms)
         for sid,anchor,text in conn.execute('SELECT source_id,anchor,text FROM passages WHERE '+clauses,tuple(sorted(terms))):
