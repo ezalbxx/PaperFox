@@ -218,12 +218,12 @@ class WisdomHandler(BaseHTTPRequestHandler):
                 raise ValueError("输入过长")
             data = json.loads(self.rfile.read(size) or b"{}")
             if route == "/api/paperfox/setup":
-                self.response(paperfox_setup.save_api_key(data.get("api_key"), data.get("connection", "system")))
+                self.response(paperfox_setup.save_settings(data))
             elif route.startswith('/api/lab/'):
                 from .lab_web import post_lab
                 if route in ("/api/lab/studio/create", "/api/lab/start") and paperfox_setup.settings_path() is not None:
-                    if not paperfox_setup.api_key():
-                        raise ValueError("请先配置 DeepSeek API Key")
+                    if not paperfox_setup.setup_state()['configured']:
+                        raise ValueError("请先配置模型 API")
                     if route == "/api/lab/studio/create":
                         data["mode"] = "report"
                         data.pop("interpreter_id", None)

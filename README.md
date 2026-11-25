@@ -10,7 +10,7 @@
 
 1. 安装 [Python 3.11 或 3.12 的 Windows x64 版本](https://www.python.org/downloads/windows/)，安装时保留 Python Launcher。下载并解压最新版本的源码 ZIP。
 2. 双击 **scripts\start_paperfox_source.cmd**。首次启动会安装 Python 依赖，完成后浏览器会打开本机工作台。
-3. 输入自己的 [DeepSeek API Key](https://platform.deepseek.com/api_keys)，点击「验证并保存」。
+3. 打开「模型设置」，选择供应商，填写模型 ID 和对应的 API Key，再点击「验证并保存」。也可以选择「自定义 API」，填入自己的接口地址。
 4. 新建实验报告，选择实验材料文件夹和指导书。有单独的报告模板时，可以再上传模板。点击「开始制作」，完成后下载 PDF。
 
 升级或删除程序前，点击工作台左下角的电源图标，选择「退出程序」。如果有报告正在制作，先暂停并等待进度保存。升级后，工作台会打开原有的本机报告库。
@@ -23,8 +23,10 @@ PPTX 可直接读取，包括幻灯片内嵌的常见图片。旧版 DOC、PPT �
 
 ## 数据与 API
 
-工作台运行在本机，源文件保持原样，生成的报告保存在 `%LOCALAPPDATA%\PaperFox\Reports`。API Key 由 Windows 加密保存。写作所需的材料内容通过 DeepSeek 官方 API 发送给 `deepseek-flash`，用量由你的 DeepSeek 账户承担。工作台记录用量和费用估算，报告制作没有本地金额上限。
+工作台运行在本机，源文件保持原样，报告保存在 `%LOCALAPPDATA%\PaperFox\Reports`。API Key 由 Windows 加密保存。写作所需的材料会提交给所选模型，费用由对应服务商计收。纸狐记录用量，有模型计价信息时也会显示费用估算。
 
-连接失败时，可在设置里切换系统代理和直连模式，再核对账户或 Key。提交反馈时请附错误信息和系统版本，保管好 API Key 和实验材料。
+内置 DeepSeek、千问、OpenAI、Claude、Gemini 和 Ollama 配置。自定义地址支持 OpenAI Chat Completions、OpenAI Responses、Anthropic Messages 和 Gemini generateContent。用于写报告的模型需要支持工具调用。验证会发送一条合成测试请求，可能产生少量用量。仅接受私有协议或云签名鉴权的服务需要兼容网关。
+
+本机 Ollama 可选择「无需密钥」，填写已安装且支持工具调用的模型 ID。兼容接口不支持流式输出时，可在高级选项打开「使用非流式兼容模式」。连接失败时，可核对地址、协议、模型 ID 和鉴权方式，或切换系统代理与直连。
 
 觉得好用，欢迎在 [GitHub 仓库](https://github.com/ezalbxx/PaperFox) 点个 Star。

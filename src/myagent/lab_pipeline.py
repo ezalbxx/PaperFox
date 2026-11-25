@@ -19,7 +19,7 @@ from .model import OpenAIModel
 from .interactive_model import StreamingModel, ResponseCancelled
 from .report_writing import (ROLES as WRITING_ROLES, WRITING_GUIDANCE, writing_packet,
                              current_instruction_packet, current_control_messages)
-from .report_context import writing_continuity
+from .report_context import fingerprint, writing_continuity
 from .report_protocol import StageUnresolved, FactConflict, RequirementConflict
 
 
@@ -160,6 +160,8 @@ class PipelineLogger(JsonlLogger):
             if bill.get('currency')=='CNY':
                 totals['cost_cny']=totals.get('cost_cny',0.0)+float(bill['estimated_amount'])
                 self.pipeline.project.data['cny_pricing_notice']='Listed-rate CNY estimate, separate from cost_usd; not invoice or free-quota accounting.'
+            elif payload.get('usd_cost_known') is False:
+                totals['unpriced_calls'] = totals.get('unpriced_calls', 0) + 1
             self.pipeline.project.save()
 
 
@@ -312,6 +314,7 @@ class LabPipeline:
         agent.ctx.deadline = time.monotonic() + max(1, self.max_seconds - (time.monotonic() - self.started))
         agent.messages = initial_messages
         checkpoint = p.root / 'role-checkpoint.json'
+        model_scope = fingerprint([config.base_url, config.model, config.api_protocol])
         action_offset = 0
         if checkpoint.is_file():
             saved = json.loads(checkpoint.read_text(encoding='utf-8'))
@@ -319,7 +322,10 @@ class LabPipeline:
             prior_payload = json.loads(prior[1]['content']) if len(prior)>=2 and prior[1].get('role')=='user' else {}
             stable = ('task','requirements','instructions','inventory','environment') if name=='executor' else tuple(request_payload)
             same_input = all(prior_payload.get(k)==request_payload.get(k) for k in stable)
+            same_model = (saved.get('model_scope') in (None, model_scope)
+                          and (config.api_protocol == 'chat' or saved.get('model_scope') == model_scope))
             if (saved.get('role') == name and saved.get('task_id') == task_id and len(prior) >= 2
+                    and (not getattr(self, 'report_collaboration', False) or same_model)
                     and same_input and not saved.get('completed')):
                 # Continue from the actual prior tool feedback, with current role instructions.
                 agent.messages = [agent.messages[0], *prior[1:]]
@@ -390,6 +396,7 @@ class LabPipeline:
                     p.data['usage_incomplete'] = not exc.response.get('usage_known', False)
                     raise Paused('已暂停模型响应；部分用量可能未由服务商返回') from exc
                 atomic_json(checkpoint, {'role': name, 'task_id': task_id, 'messages': agent.messages,
+                                         'model_scope': model_scope,
                                          'steps': agent.steps, 'action_steps':action_offset+turn+1,'completed':finish.result is not None,
                                          'notice': '相同角色与任务输入恢复原消息，不自动重放工具'})
                 if getattr(agent,'finish_reason',None)=='length' and getattr(self,'report_collaboration',False):

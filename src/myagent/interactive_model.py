@@ -36,6 +36,8 @@ class StreamingModel(OpenAIModel):
                 pass
 
     def chat(self, messages, tools=None, tool_choice="auto"):
+        from .model_endpoint import chat_messages
+
         text, calls, usage = [], {}, None
         finish_reason = None
         compacting = bool(messages and str(messages[0].get("content", "")).startswith(
@@ -54,12 +56,25 @@ class StreamingModel(OpenAIModel):
                 if remaining <= 0:
                     raise TimeoutError("turn deadline reached before model call")
                 try:
+                    if self.config.buffered:
+                        result = self._buffered_chat(messages, tools, tool_choice,
+                            limit=getattr(self, 'output_token_limit', 8192 if thinking else 4096),
+                            timeout=httpx_timeout(remaining), thinking=thinking, effort=policy.effort if thinking else None)
+                        if self.cancel_event.is_set():
+                            raise ResponseCancelled(result)
+                        self.emit("api_end", seconds=time.monotonic()-started, usage_known=result['usage_known'])
+                        if not compacting and result['message']['content']:
+                            self.emit("answer_delta", text=result['message']['content'])
+                        return result
+                    token_limit = getattr(self, 'output_token_limit', 8192 if thinking else 4096)
+                    token_field = 'max_completion_tokens' if self.config.provider == 'openai' else 'max_tokens'
                     self._stream = self._client.chat.completions.create(
-                        model=self.config.model, messages=messages, tools=tools or None,
-                        tool_choice=tool_choice if tools else None, temperature=0.2,
+                        model=self.config.model, messages=chat_messages(messages), tools=tools or None,
+                        tool_choice=tool_choice if tools else None,
+                        **({} if self.config.provider in ('openai','custom') else {'temperature':0.2}),
                         stream=True, stream_options={"include_usage": True},
                         **({'parallel_tool_calls': False} if getattr(self, 'single_tool_calls', False) else {}),
-                        timeout=min(60.0, remaining), max_tokens=getattr(self, 'output_token_limit', 8192 if thinking else 4096),
+                        timeout=min(60.0, remaining), **{token_field: token_limit},
                         extra_body=self.config.request_options(thinking=thinking, effort=policy.effort if thinking else None),
                     )
                     for chunk in self._stream:
@@ -131,3 +146,9 @@ class StreamingModel(OpenAIModel):
         result = self._normalize(SimpleNamespace(choices=[SimpleNamespace(message=message)], usage=usage))
         result["usage_known"] = usage is not None
         return result
+
+
+def httpx_timeout(remaining):
+    from httpx import Timeout
+
+    return Timeout(max(0.1, remaining), connect=min(10.0, remaining))

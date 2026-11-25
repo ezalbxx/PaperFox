@@ -89,6 +89,7 @@ function wrenderProgress(p){
  const previewKey=JSON.stringify(p.previews||[]);wq('artifactPreviews').hidden=!(p.previews||[]).length;if(wq('artifactPreviewGrid').dataset.key!==previewKey){wq('artifactPreviewGrid').dataset.key=previewKey;wq('artifactPreviewGrid').replaceChildren(...(p.previews||[]).map(file=>{const button=wn('button'),img=wn('img');img.src=wfile(file.path);img.alt=file.name;button.append(img,wn('span',file.name));button.onclick=()=>wpreview(file.path,file.name);return button;}));}
  const activity=p.activity.slice().reverse(),key=JSON.stringify(activity);if(wq('productionActivity').dataset.key!==key){wq('productionActivity').dataset.key=key;wq('productionActivity').replaceChildren(...activity.map(a=>{const row=wn('div',undefined,'activity-item'),info=wn('div');info.append(wn('p',a.text),wn('time',wtime(a.at)));row.append(wn('i',undefined,'activity-point'),info);return row;}));if(!activity.length)wq('productionActivity').append(wn('p','开始制作后，真实保存的动态会出现在这里。','waiting-copy'));}
  wq('metricMaterials').textContent=p.materials_count+' 份';wq('metricVersions').textContent=p.versions_count+' 稿';wq('metricTokens').textContent=Number(p.usage.tokens||0).toLocaleString();wq('metricCost').textContent=p.usage.cost_cny!=null?'¥'+Number(p.usage.cost_cny).toFixed(3):'$'+Number(p.usage.cost_usd||0).toFixed(4);if(p.usage.cost_cny!=null&&p.usage.cost_usd>0)wq('metricCost').textContent+=' + $'+Number(p.usage.cost_usd).toFixed(3);
+ if(p.usage.unpriced_calls)wq('metricCost').textContent=(p.usage.cost_cny!=null||p.usage.cost_usd>0)?wq('metricCost').textContent+' + 部分未计价':'暂无费用估算';
 }
 async function wrefresh(){if(wb.exiting||wb.refreshing||document.hidden)return;wb.refreshing=true;try{if(wb.view==='progress'&&project){const selected=project;const state=await wrequest('studio/progress');if(project===selected&&wb.view==='progress')wrenderProgress(state);}if(wb.view==='files'&&wb.current?.busy&&Date.now()-(wb.filesAt||0)>5000){wb.current=await wrequest('studio/progress');await wloadFiles();}if(wb.view==='library'&&Date.now()-wb.libraryAt>5000)await wlibrary();}catch(e){if(wb.view==='progress'&&!wb.exiting){wq('journeyStatus').textContent='连接中断 · 正在重连';wq('journeyPersistence').textContent='已保存的进度保留，恢复连接后继续显示。';}}finally{wb.refreshing=false;}}
 async function wmanage(id,action,extra={}){await wrequest('studio/manage',{project:id,action,...extra});await wlibrary();if(project===id)wb.current=await wrequest('studio/progress');}
@@ -98,11 +99,35 @@ async function wsetupRequest(data){
  const value=await r.json();if(!r.ok)throw Error(value.error||'无法读取 DeepSeek 设置');return value;
 }
 function wopenSetup(){
- wq('paperfoxSetupError').hidden=true;wq('paperfoxApiKey').value='';
- wq('paperfoxApiKey').required=!wb.setup?.configured;
- wq('paperfoxApiKey').placeholder=wb.setup?.configured?'留空可继续使用已保存的密钥':'';
- wq('paperfoxConnection').value=wb.setup?.connection||'system';
+ const state=wb.setup;
+ if(!state?.presets)return;
+ wq('paperfoxSetupError').hidden=true;
+ wq('paperfoxPreset').replaceChildren(...Object.entries(state.presets).map(([id,preset])=>{
+  const option=wn('option',preset.label);option.value=id;return option;
+ }));
+ wq('paperfoxPreset').value=state.preset;
+ wq('paperfoxConnection').value=state.connection;
+ wmodelFields(state);
  const dialog=wq('paperfoxSetupDialog');if(!dialog.open)dialog.showModal();
+}
+function wmodelFields(settings){
+ wq('paperfoxBaseUrl').value=settings.base_url;
+ wq('paperfoxModel').value=settings.model;
+ wq('paperfoxProtocol').value=settings.protocol;
+ wq('paperfoxAuth').value=settings.auth;
+ wq('paperfoxApiVersion').value=settings.api_version||'';
+ wq('paperfoxBuffered').checked=!!settings.buffered;
+ wq('paperfoxApiKey').value='';
+ wmodelKeyState();
+}
+function wmodelKeyState(){
+ const state=wb.setup,key=wq('paperfoxApiKey'),auth=wq('paperfoxAuth').value;
+ const same=state?.has_key&&state.auth===auth&&state.protocol===wq('paperfoxProtocol').value
+  &&state.base_url===wq('paperfoxBaseUrl').value.trim().replace(/\/$/,'');
+ key.required=auth!=='none'&&!same;
+ key.disabled=auth==='none';
+ key.placeholder=same?'留空可继续使用已保存的密钥':'';
+ wq('paperfoxKeyField').hidden=auth==='none';
 }
 async function wopenCreate(){
  if(wb.creating)return;
@@ -188,10 +213,17 @@ wq('replaceGuidance').onclick=async()=>{
 wq('openPaperfoxSetup').onclick=wopenSetup;
 wq('closePaperfoxSetup').onclick=()=>wq('paperfoxSetupDialog').close();
 wq('paperfoxSetupDialog').addEventListener('close',()=>{wq('paperfoxApiKey').value='';});
+wq('paperfoxPreset').onchange=e=>wmodelFields(wb.setup.presets[e.target.value]);
+for(const name of ['paperfoxBaseUrl','paperfoxProtocol','paperfoxAuth'])wq(name).addEventListener('input',wmodelKeyState);
 wq('paperfoxSetupForm').onsubmit=async e=>{
  e.preventDefault();const save=wq('paperfoxSetupSave'),error=wq('paperfoxSetupError');
  save.disabled=true;error.hidden=true;
- try{wb.setup=await wsetupRequest({api_key:wq('paperfoxApiKey').value,connection:wq('paperfoxConnection').value});wq('paperfoxSetupDialog').close();toast('DeepSeek 已连接，可以新建报告。');}
+ try{wb.setup=await wsetupRequest({
+  preset:wq('paperfoxPreset').value,base_url:wq('paperfoxBaseUrl').value,model:wq('paperfoxModel').value,
+  protocol:wq('paperfoxProtocol').value,auth:wq('paperfoxAuth').value,api_key:wq('paperfoxApiKey').value,
+  connection:wq('paperfoxConnection').value,api_version:wq('paperfoxApiVersion').value,
+  buffered:wq('paperfoxBuffered').checked
+ });wq('paperfoxSetupDialog').close();toast('模型工具调用验证通过，可以新建报告。');}
  catch(e){error.textContent=e.message;error.hidden=false;}
  finally{save.disabled=false;}
 };

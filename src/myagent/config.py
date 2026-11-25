@@ -64,6 +64,10 @@ class Config:
     base_url: str = ""
     api_key: str = ""
     model: str = ""
+    api_protocol: str = "chat"
+    api_auth: str = "bearer"
+    api_version: str = ""
+    buffered: bool = False
     max_steps: int = 20
     max_cost: float = 0.5
     max_seconds: int = 300
@@ -91,6 +95,8 @@ class Config:
         preset = PROVIDERS.get(self.provider, PROVIDERS["custom"])
         self.base_url = self.base_url or preset["base_url"]
         self.model = self.model or preset["model"]
+        if self.api_protocol != "chat" or self.api_auth != "bearer" or self.api_version:
+            self.buffered = True
         if self.execution_policy not in ("guarded", "trusted"):
             raise ValueError("execution_policy must be guarded or trusted")
         self.skill_dirs = tuple(Path(p).resolve() for p in self.skill_dirs)
@@ -100,7 +106,7 @@ class Config:
     @classmethod
     def from_env(cls, workspace: Path | str | None = None, **overrides) -> "Config":
         ws = Path(workspace).resolve() if workspace else Path.cwd().resolve()
-        from .paperfox_setup import DEEPSEEK_MODEL, DEEPSEEK_URL, api_key, settings_path, connection_mode
+        from .paperfox_setup import model_settings, settings_path
         portable = settings_path() is not None
         if not portable:
             load_dotenv(ws / ".env")
@@ -130,9 +136,7 @@ class Config:
             "figure_supports_images": os.getenv("MYAGENT_FIGURE_SUPPORTS_IMAGES", "false").lower() in ("1", "true", "yes"),
         }
         if portable:
-            data.update(provider="deepseek", base_url=DEEPSEEK_URL, api_key=api_key(),
-                        model=DEEPSEEK_MODEL, figure_model="", figure_supports_images=False,
-                        trust_env=connection_mode() == "system")
+            data.update(model_settings(), figure_model="", figure_supports_images=False)
         data.update({k: v for k, v in overrides.items() if v is not None})
         return cls(**data)
 
