@@ -19,7 +19,7 @@
 
 ## 数据与 API
 
-工作台运行在本机，源文件保持原样，生成的报告保存在 `%LOCALAPPDATA%\PaperFox\Reports`。API Key 由 Windows 加密保存。写作所需的材料内容通过 DeepSeek 官方 API 发送给 `deepseek-flash`，用量由你的 DeepSeek 账户承担。
+工作台运行在本机，源文件保持原样，生成的报告保存在 `%LOCALAPPDATA%\PaperFox\Reports`。API Key 由 Windows 加密保存。写作所需的材料内容通过 DeepSeek 官方 API 发送给 `deepseek-flash`，用量由你的 DeepSeek 账户承担。工作台记录用量和费用估算，报告制作没有本地金额上限。
 
 连接失败时，可在设置里切换系统代理和直连模式，再核对账户或 Key。提交反馈时请附错误信息和系统版本，保管好 API Key 和实验材料。
 

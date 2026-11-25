@@ -136,13 +136,14 @@ def run(workflow, payload, original_validator, task_id=None):
         validate_result(result,data);original_validator(result)
     atomic_json(path,{'status':'started','packet':data,'source_document_hash':fingerprint(payload['document'])})
     factory=workflow.model_factory
-    accounting=workflow.state.setdefault('review_accounting',{'currency':'CNY','limit_cny':1.0,'spent_cny':0.,'calls':0})
-    # User's review budget covers review, recheck and protocol retries, not
-    # Writer/patcher fees. Each is logged separately, never recategorized.
-    accounting['limit_cny']=min(1.0,float(p.data.get('report_review_budget_cny',1.0)))
+    limit = min(1.0, float(p.data.get('report_review_budget_cny', 1.0))) if workflow.max_cost else None
+    accounting = workflow.state.setdefault('review_accounting', {'currency':'CNY','spent_cny':0.,'calls':0})
+    accounting['limit_cny'] = limit
     def guarded_factory(config):
         model=factory(config)
         model.output_token_limit=OUTPUT_TOKENS
+        if limit is None:
+            return model
         original_chat=model.chat
         def chat(messages, tools=None, *args, **kwargs):
             upper_input=len(json.dumps({'messages':messages,'tools':tools},ensure_ascii=False).encode('utf-8'))+1024
@@ -152,7 +153,7 @@ def run(workflow, payload, original_validator, task_id=None):
             # discounts/time-of-day. Charged cost uses actual provider tokens.
             rates=pricing['rates_per_million']
             reserve=(upper_input*max(2.0,rates['input'])+OUTPUT_TOKENS*max(8.0,rates['output']))/1e6
-            if accounting['spent_cny']+reserve>accounting['limit_cny']:
+            if accounting['spent_cny']+reserve>limit:
                 raise Paused('审查1元预算余量不足以覆盖下一次调用；未解决问题与稿件已保存，不视为审查通过')
             response=original_chat(messages,tools,*args,**kwargs)
             bill=response.get('billing') or config.billing_details(response.get('usage',{}))

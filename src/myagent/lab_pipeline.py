@@ -172,7 +172,7 @@ class LabPipeline:
         self.max_steps = max_steps
         self.max_cost = max_cost
         self.max_seconds = max_seconds
-        if not 1 <= max_steps <= 1000 or not 0 < max_cost <= 100 or not 1 <= max_seconds <= 86400 or not 0 <= review_rounds <= 2:
+        if not 1 <= max_steps <= 1000 or not 0 <= max_cost <= 100 or not 1 <= max_seconds <= 86400 or not 0 <= review_rounds <= 2:
             raise ValueError('额度范围无效；评阅修改轮数为0至2')
         self.review_rounds = review_rounds
         self.config = Config.from_env(workspace=project.root, execution_policy='trusted')
@@ -210,7 +210,7 @@ class LabPipeline:
             raise Paused('用户暂停；已完成任务和运行证据保留')
         if totals['steps'] - self.initial_totals['steps'] >= self.max_steps:
             raise Paused('本次模型步骤额度已到')
-        if totals['cost_usd'] - self.initial_totals['cost_usd'] >= self.max_cost:
+        if self.max_cost and totals['cost_usd'] - self.initial_totals['cost_usd'] >= self.max_cost:
             raise Paused('本次费用额度已到（USD估算）')
         if time.monotonic() - self.started >= self.max_seconds:
             raise Paused('本次运行时间额度已到')

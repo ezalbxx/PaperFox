@@ -17,7 +17,6 @@ from uuid import uuid4
 
 from .jobs import atomic_json
 from .lab_project import LabProject, digest, now, pdf_pages, scanned_guidance_error
-from .paperfox_setup import settings_path
 from .word_material import GUIDES, word_pages
 
 PHASES = [('materials', '接收材料'), ('planning', '理解要求'), ('execution', '执行实验'),
@@ -133,8 +132,6 @@ def create_project(workspace, data):
     if execution:p.data['execution']=execution
     p.data['use_default_report_template']=True
     p.data['report_first_pass']=True
-    if settings_path() is None:
-        p.data['report_total_budget_cny']=3.0
     p.data['studio'] = {'mode': mode, 'archived': False, 'starred': False, 'created_at': now(), 'phase': 'materials'}
     if data.get('validation_origin'):p.data['validation_origin'] = data['validation_origin']
     p.note('材料已接收，已建立独立报告项目', files=len(p.data['materials']))
@@ -241,11 +238,6 @@ class StudioRunner:
         options.setdefault('max_steps',400);options.setdefault('max_cost',5.0);options.setdefault('max_seconds',7200)
         if self.model_factory:options['model_factory'] = self.model_factory
         try:
-            if (settings_path() is not None and p.data.get('studio', {}).get('mode') == 'report'
-                    and p.data.get('report_total_budget_cny') == 3.0):
-                # Older Windows workbench builds stored the default as a hard CNY cap.
-                p.data.pop('report_total_budget_cny')
-                p.save()
             if p.data.get('studio',{}).get('mode') == 'execute' and not p.data.get('report_sources'):
                 p.data['studio']['phase'] = 'execution';p.save()
                 self.current = LabPipeline(p, **options)
@@ -289,6 +281,9 @@ def progress(project, busy=False):
         fraction = min(1,detail.get('completed',0)/max(1,detail['total']))
     percent = 100 if index == 6 and report else min(99,round((index+fraction)/6*100))
     pending = w.get('pending')
+    if (p.get('studio', {}).get('mode') == 'report' and pending
+            and pending.get('kind') == 'budget'):
+        pending = None
     questions = pending.get('questions',[]) if pending else []
     if not w and state == 'needs_input':questions = p.get('plan',{}).get('questions',[])
     activity = []

@@ -12,7 +12,8 @@ def prepare_report(project):
     if 'report_sources' not in p.data and not p.data.get('report'):
         p.data.setdefault('use_default_report_template',True)
     p.data.setdefault('report_review_mode','lean')
-    p.data.setdefault('report_review_budget_cny',1.0)
+    if p.data.get('studio', {}).get('mode') != 'report':
+        p.data.setdefault('report_review_budget_cny',1.0)
     p.data.setdefault('report_review_scope','chapters')
     p.data.setdefault('report_production_mode','lean')
     if p.data.get('report_review_mode')=='lean' and not p.data.get('report_first_pass'):

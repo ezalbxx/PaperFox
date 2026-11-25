@@ -225,6 +225,9 @@ class ReportWorkflow(LabPipeline):
     """Stage checkpoints persist across processes, user replies stay explicit."""
     def __init__(self,project,**kwargs):
         kwargs={**REPORT_LIMITS,**kwargs}
+        workbench_report = project.data.get('studio', {}).get('mode') == 'report'
+        if workbench_report:
+            kwargs['max_cost'] = 0
         super().__init__(project,**kwargs)
         self.report_collaboration=True
         if 'report_workflow' not in project.data:
@@ -232,6 +235,16 @@ class ReportWorkflow(LabPipeline):
             project.data['report_workflow']={'stage':'intake','status':'ready','outputs':{},'history':[],
                 'interactions':[],'pending':None,'approved_blocks':[],'interaction_mode':'automatic'}
             project.save()
+        if workbench_report:
+            old_total = project.data.pop('report_total_budget_cny', None)
+            old_review = project.data.pop('report_review_budget_cny', None)
+            pending = self.state.get('pending') or {}
+            if pending.get('kind') == 'budget':
+                self.state.update(pending=None, status='ready')
+                self.state.pop('error', None)
+                project.save()
+            elif old_total is not None or old_review is not None:
+                project.save()
 
     def editing_input(self):
         preview=self.state.get('interrupted_preview',{})
@@ -322,7 +335,7 @@ class ReportWorkflow(LabPipeline):
 
     def check_limits(self):
         budget=self.state.get('budget')
-        if budget:
+        if budget and self.max_cost:
             used=self.project.data['totals']['cost_usd']-budget['baseline_cost_usd']
             if used>=self.max_cost:
                 raise Paused(f'报告预算已用完：已知估算 ${used:.4f} / ${self.max_cost:.2f} USD；已保存进度，不会自动重置预算')
