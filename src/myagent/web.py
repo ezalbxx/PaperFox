@@ -260,11 +260,11 @@ class WisdomHandler(BaseHTTPRequestHandler):
                 session.submit(data)
                 self.response({"accepted":True})
             elif route == "/api/shutdown":
-                if self.server.lab.busy():
-                    raise ValueError('实验正在运行，请先暂停再关闭服务')
-                self.server.lab.close()
-                self.response({"stopping":True})
-                threading.Thread(target=self.server.shutdown,daemon=True).start()
+                self.server.lab.begin_shutdown()
+                try:
+                    self.response({"stopping": True})
+                finally:
+                    threading.Thread(target=self.server.shutdown, daemon=True).start()
             else:
                 self.response({"error":"操作不存在"},404)
         except (BrokenPipeError, ConnectionResetError):

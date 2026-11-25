@@ -90,7 +90,7 @@ function wrenderProgress(p){
  const activity=p.activity.slice().reverse(),key=JSON.stringify(activity);if(wq('productionActivity').dataset.key!==key){wq('productionActivity').dataset.key=key;wq('productionActivity').replaceChildren(...activity.map(a=>{const row=wn('div',undefined,'activity-item'),info=wn('div');info.append(wn('p',a.text),wn('time',wtime(a.at)));row.append(wn('i',undefined,'activity-point'),info);return row;}));if(!activity.length)wq('productionActivity').append(wn('p','开始制作后，真实保存的动态会出现在这里。','waiting-copy'));}
  wq('metricMaterials').textContent=p.materials_count+' 份';wq('metricVersions').textContent=p.versions_count+' 稿';wq('metricTokens').textContent=Number(p.usage.tokens||0).toLocaleString();wq('metricCost').textContent=p.usage.cost_cny!=null?'¥'+Number(p.usage.cost_cny).toFixed(3):'$'+Number(p.usage.cost_usd||0).toFixed(4);if(p.usage.cost_cny!=null&&p.usage.cost_usd>0)wq('metricCost').textContent+=' + $'+Number(p.usage.cost_usd).toFixed(3);
 }
-async function wrefresh(){if(wb.refreshing||document.hidden)return;wb.refreshing=true;try{if(wb.view==='progress'&&project){const selected=project;const state=await wrequest('studio/progress');if(project===selected&&wb.view==='progress')wrenderProgress(state);}if(wb.view==='files'&&wb.current?.busy&&Date.now()-(wb.filesAt||0)>5000){wb.current=await wrequest('studio/progress');await wloadFiles();}if(wb.view==='library'&&Date.now()-wb.libraryAt>5000)await wlibrary();}catch(e){if(wb.view==='progress'){wq('journeyStatus').textContent='连接中断 · 正在重连';wq('journeyPersistence').textContent='已保存的进度保留，恢复连接后继续显示。';}}finally{wb.refreshing=false;}}
+async function wrefresh(){if(wb.exiting||wb.refreshing||document.hidden)return;wb.refreshing=true;try{if(wb.view==='progress'&&project){const selected=project;const state=await wrequest('studio/progress');if(project===selected&&wb.view==='progress')wrenderProgress(state);}if(wb.view==='files'&&wb.current?.busy&&Date.now()-(wb.filesAt||0)>5000){wb.current=await wrequest('studio/progress');await wloadFiles();}if(wb.view==='library'&&Date.now()-wb.libraryAt>5000)await wlibrary();}catch(e){if(wb.view==='progress'&&!wb.exiting){wq('journeyStatus').textContent='连接中断 · 正在重连';wq('journeyPersistence').textContent='已保存的进度保留，恢复连接后继续显示。';}}finally{wb.refreshing=false;}}
 async function wmanage(id,action,extra={}){await wrequest('studio/manage',{project:id,action,...extra});await wlibrary();if(project===id)wb.current=await wrequest('studio/progress');}
 function wsettings(p){wb.manageId=p.id;wq('renameReportInput').value=p.title;wq('archiveReportButton').textContent=p.studio.archived?'移回报告库':'归档这份报告';wq('archiveReportButton').dataset.archived=String(!!p.studio.archived);wq('archiveReportButton').disabled=p.busy;wq('renameReportInput').disabled=p.busy;wq('renameReportForm').querySelector('button').disabled=p.busy;wq('manageReportDialog').showModal();}
 async function wsetupRequest(data){
@@ -195,7 +195,26 @@ wq('paperfoxSetupForm').onsubmit=async e=>{
  catch(e){error.textContent=e.message;error.hidden=false;}
  finally{save.disabled=false;}
 };
-wsetupRequest().then(state=>{wb.setup=state;wq('openPaperfoxSetup').hidden=!state.enabled;if(state.enabled&&!state.configured)wopenSetup();}).catch(werror);
+const exitDialog=wq('paperfoxExitDialog'),exitConfirm=wq('confirmPaperfoxExit'),exitCancel=wq('cancelPaperfoxExit');
+wq('openPaperfoxExit').onclick=()=>{
+ wq('paperfoxExitError').hidden=true;
+ exitDialog.showModal();
+};
+exitCancel.onclick=()=>exitDialog.close();
+exitDialog.oncancel=e=>{if(exitConfirm.disabled)e.preventDefault();};
+exitConfirm.onclick=async()=>{
+ const error=wq('paperfoxExitError');
+ error.hidden=true;exitConfirm.disabled=true;exitCancel.disabled=true;
+ try{
+  await post('/api/shutdown',{confirmed:true});
+  wb.exiting=true;
+  wq('paperfoxExitStatus').textContent='正在退出纸狐。请关闭此页面，稍等片刻后再升级或删除程序。';
+  exitConfirm.hidden=true;exitCancel.hidden=true;
+ }catch(e){
+  error.textContent=e.message;error.hidden=false;exitConfirm.disabled=false;exitCancel.disabled=false;
+ }
+};
+wsetupRequest().then(state=>{wb.setup=state;wq('openPaperfoxSetup').hidden=!state.enabled;wq('openPaperfoxExit').hidden=!state.enabled;if(state.enabled&&!state.configured)wopenSetup();}).catch(werror);
 wq('navManuscript').onclick=async()=>{try{wshow('library');await wlibrary();}catch(e){werror(e);}};wq('navWorkbench').onclick=async()=>{
  if(wb.view==='editor')return;
  try{

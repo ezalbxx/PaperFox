@@ -13,6 +13,13 @@ class LabHub:
     def __init__(self):
         self.lock = threading.RLock()
         self.runs = {}
+        self.closing = False
+
+    def begin_shutdown(self):
+        with self.lock:
+            if self.busy():
+                raise ValueError('有报告正在处理，请先在制作进度中暂停，待进度保存后再退出。')
+            self.closing = True
 
     def key(self, workspace, pid):
         return (str(Path(workspace).resolve()).casefold(), pid)
@@ -45,6 +52,8 @@ class LabHub:
     def start(self, workspace, pid, args):
         key = self.key(workspace, pid)
         with self.lock:
+            if self.closing:
+                raise ValueError('纸狐正在退出')
             if self.is_busy(workspace, pid):
                 raise ValueError('这个实验正在执行')
             project = LabProject(workspace, pid)
@@ -84,6 +93,8 @@ class LabHub:
 
     def mutate(self, workspace, pid, operation):
         with self.lock:
+            if self.closing:
+                raise ValueError('纸狐正在退出')
             if self.is_busy(workspace, pid):
                 raise ValueError('请先暂停当前实验再修改')
             project = LabProject(workspace, pid)
@@ -104,6 +115,8 @@ class LabHub:
     def selection_action(self, workspace, pid, data):
         from .report_discussion import SelectionRunner, queue, snapshot
         with self.lock:
+            if self.closing:
+                raise ValueError('纸狐正在退出')
             if self.is_busy(workspace, pid):raise ValueError('当前报告正在处理，请稍候或先暂停')
             project = LabProject(workspace, pid)
             stream = project.acquire()
@@ -198,6 +211,8 @@ def post_lab(hub, workspace, route, data):
     if route=='/api/lab/studio/create':
         from .studio_workspace import create_project
         with hub.lock:
+            if hub.closing:
+                raise ValueError('纸狐正在退出')
             project=create_project(workspace,data)
             # Retry of an acknowledged upload must not create or run another experiment.
             if data.get('start',True) and not hub.is_busy(workspace,project.id) and not project.data['runs'] and not project.data.get('report_workflow'):

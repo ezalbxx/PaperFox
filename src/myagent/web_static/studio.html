@@ -9,7 +9,7 @@
   <div class="sidebar-section"><p class="sidebar-label">当前文稿</p><button id="currentDocument" class="document-item"><span class="document-icon">↗</span><span id="sidebarTitle">实验报告<small>已保存的报告</small></span><i></i></button><div id="projectMenu" hidden></div></div>
   <div class="sidebar-section outline-section"><p class="sidebar-label">文稿大纲</p><nav id="outline" aria-label="文稿大纲"></nav></div>
   <div class="sidebar-section thread-section"><p class="sidebar-label">修改讨论 <span id="threadCount">0</span></p><div id="threadList"><p class="empty-small">选中一句话，开始第一次讨论。</p></div></div>
-  <div class="sidebar-bottom"><div class="avatar">Y</div><div>我的工作台<small>每一稿，都有来路</small></div><button id="openPaperfoxSetup" title="DeepSeek 设置" aria-label="DeepSeek 设置" hidden>⚙</button><button id="showAbout" title="关于纸狐" aria-label="关于纸狐">ⓘ</button></div>
+  <div class="sidebar-bottom"><div class="avatar">Y</div><div>我的工作台<small>每一稿，都有来路</small></div><button id="openPaperfoxSetup" title="DeepSeek 设置" aria-label="DeepSeek 设置" hidden>⚙</button><button id="showAbout" title="关于纸狐" aria-label="关于纸狐">ⓘ</button><button id="openPaperfoxExit" title="退出纸狐" aria-label="退出纸狐" hidden>⏻</button></div>
 </aside>
 <div class="workspace">
   <header class="topbar"><div class="breadcrumb"><button id="backToLibrary">报告库</button><span aria-hidden="true">／</span><strong id="breadcrumbTitle">实验报告</strong></div><div class="top-actions"><span class="preview-badge">正在连接报告</span><a id="pdfLink" class="subtle-button" target="_blank" rel="noopener" hidden>↗ 最新 PDF</a><button id="resetPreview" class="icon-button" title="刷新正式报告" aria-label="刷新正式报告">↶</button></div></header>
@@ -48,6 +48,11 @@
 </aside>
 <dialog id="aboutDialog" class="about-dialog"><button id="closeAbout" class="icon-button" aria-label="关闭说明">×</button><p class="overline">PAPERFOX / 纸狐</p><h2>把想法折成稿，<br>把修改变成默契。</h2><p>选择材料 → 理解要求 → 撰写报告 → 导出 PDF。</p><p>选择指导书和已有实验材料，纸狐会整理证据并写成报告。进度、文件和历史版本自动保存。报告生成后，选中文字与 DeepSeek 讨论改法，采用后更新文章和 PDF，积累可核查的写作经验。</p><button id="tryExample" class="primary-button">打开示例，试一次改稿 ↗</button></dialog>
 <div id="toast" class="toast" role="status" hidden></div>
+<dialog id="paperfoxExitDialog" class="create-report-dialog" aria-labelledby="paperfoxExitTitle">
+  <div class="create-heading"><div><h2 id="paperfoxExitTitle">退出纸狐</h2><p id="paperfoxExitStatus" role="status">退出会关闭本机程序。已保存的报告和设置会保留。</p></div></div>
+  <p id="paperfoxExitError" class="create-report-error" role="alert" hidden></p>
+  <div class="create-footer"><button type="button" id="cancelPaperfoxExit" class="bench-secondary" autofocus>取消</button><button type="button" id="confirmPaperfoxExit" class="bench-primary">退出程序</button></div>
+</dialog>
 <dialog id="createReportDialog" class="create-report-dialog"><div class="create-heading"><div><h2>新建实验报告</h2><p>用指导书和已有实验材料生成报告。</p></div><button id="closeCreateReport" class="icon-button" aria-label="关闭新建报告">×</button></div><form id="createReportForm"><label class="field-label" for="reportTitleInput">报告名称</label><input id="reportTitleInput" class="bench-input" placeholder="例如：编译系统实验报告" maxlength="180"><div class="source-pickers">
 <div><button type="button" id="chooseLocalLibrary" class="bench-quiet">选择实验材料目录</button><p id="chosenLibrary" class="chosen-library" hidden></p></div>
 <div><button type="button" id="chooseGuide" class="bench-quiet">选择实验指导书</button><p id="chosenGuide" class="chosen-library" hidden></p></div>
