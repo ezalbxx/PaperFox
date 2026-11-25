@@ -1,0 +1,24 @@
+# 纸狐 PaperFox
+
+**把实验材料整理成一份可以阅读、修改和导出的实验报告。**
+
+[项目主页](https://ezalbxx.github.io/PaperFox/) · [Windows 下载](https://github.com/ezalbxx/PaperFox/releases/latest) · [反馈问题](https://github.com/ezalbxx/PaperFox/issues)
+
+纸狐从实验指导书、已有代码、结果和图表中梳理实验过程，规划章节，生成报告正文，并导出 PDF。你可以在工作台查看制作进度、阅读报告和修改选中的段落。
+
+## 在 Windows 上运行
+
+1. 安装 [Python 3.11 或 3.12 的 Windows x64 版本](https://www.python.org/downloads/windows/)，安装时保留 Python Launcher。下载并解压最新版本的源码 ZIP。
+2. 双击 **scripts\start_paperfox_source.cmd**。首次启动会安装 Python 依赖，完成后浏览器会打开本机工作台。
+3. 输入自己的 [DeepSeek API Key](https://platform.deepseek.com/api_keys)，点击「验证并保存」。
+4. 新建实验报告，选择实验材料文件夹和指导书。有单独的报告模板时，可以再上传模板。点击「开始制作」，完成后下载 PDF。
+
+指导书支持可提取文本的 PDF 和 DOCX。旧版 DOC 需要本机安装 Microsoft Word，也可以先转成 DOCX。扫描版 PDF 需要先做 OCR。安装 [Tectonic](https://tectonic-typesetting.github.io/) 并加入 PATH 后，可使用 LaTeX 排版。未安装时，程序使用内置 PDF 排版。
+
+## 数据与 API
+
+工作台运行在本机，源文件保持原样，生成的报告保存在 `%LOCALAPPDATA%\PaperFox\Reports`。API Key 由 Windows 加密保存。写作所需的材料内容通过 DeepSeek 官方 API 发送给 `deepseek-flash`，用量由你的 DeepSeek 账户承担。
+
+连接失败时，可在设置里切换系统代理和直连模式，再核对账户或 Key。提交反馈时请附错误信息和系统版本，保管好 API Key 和实验材料。
+
+觉得好用，欢迎在 [GitHub 仓库](https://github.com/ezalbxx/PaperFox) 点个 Star。

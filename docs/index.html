@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="纸狐根据已有实验材料和指导书制作实验报告，并在 Windows 本机导出 PDF。">
+  <title>纸狐 PaperFox · 根据材料写实验报告</title>
+  <style>
+    :root { color-scheme: light; font-family: "Segoe UI", "Microsoft YaHei", sans-serif; color: #28332c; background: #f6f3eb; }
+    body { margin: 0; }
+    main { max-width: 820px; margin: auto; padding: clamp(30px, 8vw, 96px) 24px; }
+    header { padding: clamp(24px, 6vw, 64px); background: linear-gradient(110deg, #fffdf7, #f0e1d1); border: 1px solid #e3d8c9; border-radius: 26px; }
+    .brand { display: flex; align-items: center; gap: 12px; color: #784c38; font-weight: 700; }
+    h1 { font-size: clamp(32px, 6vw, 58px); margin: 24px 0 12px; }
+    p, li { line-height: 1.8; }
+    nav { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 24px; }
+    a { color: #813d27; }
+    nav a { padding: 10px 16px; border: 1px solid #a46b53; border-radius: 10px; text-decoration: none; font-weight: 650; }
+    nav a:first-child { background: #974729; border-color: #974729; color: white; }
+    section { padding: 18px 6px; }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <div class="brand"><img src="paperfox.svg" alt="" width="36" height="36">纸狐 PaperFox</div>
+      <h1>根据材料写实验报告</h1>
+      <p>交给纸狐实验指导书、已有代码、结果和图表，在本机工作台查看进度、阅读正文并导出 PDF。</p>
+      <nav aria-label="项目链接">
+        <a href="https://github.com/ezalbxx/PaperFox/releases/latest">下载 Windows 试用版</a>
+        <a href="https://github.com/ezalbxx/PaperFox">GitHub · Star</a>
+      </nav>
+    </header>
+    <section>
+      <h2>开始使用</h2>
+      <ol>
+        <li>安装 Python 3.11 或 3.12，解压下载的源码 ZIP。</li>
+        <li>双击 <code>scripts\start_paperfox_source.cmd</code>，等待工作台打开。</li>
+        <li>配置自己的 DeepSeek API Key，选择实验材料文件夹和指导书。</li>
+        <li>点击「开始制作」，完成后下载 PDF。</li>
+      </ol>
+      <p>写作所需的材料内容会通过官方接口发送至 DeepSeek，费用由你的 DeepSeek 账户承担。</p>
+    </section>
+  </main>
+</body>
+</html>

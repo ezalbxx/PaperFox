@@ -1,0 +1,110 @@
+{
+  "template_version": 1,
+  "headings": [
+    "实验项目名称",
+    "实验原理",
+    "实验目的",
+    "实验内容",
+    "实验器材",
+    "实验步骤",
+    "实验数据及结果分析",
+    "总结及心得体会",
+    "对本实验过程及方法、手段的改进建议"
+  ],
+  "body_font_size": 12,
+  "heading_font_size": 17,
+  "margins": {
+    "left": 62,
+    "right": 62,
+    "top": 48,
+    "bottom": 50
+  },
+  "fields": {
+    "name": "学生姓名",
+    "student_id": "学号",
+    "class_name": "班级"
+  },
+  "signature_labels": [],
+  "section_notes": [
+    {
+      "number": 1,
+      "heading": "实验项目名称",
+      "guidance": "只填写具体实验项目名称，一行即可，不为篇幅目标扩写。"
+    },
+    {
+      "number": 2,
+      "heading": "实验原理",
+      "guidance": "半页内简述理解实验必需的核心机制，按内容自然分段。"
+    },
+    {
+      "number": 3,
+      "heading": "实验目的",
+      "guidance": "用一个自动编号列表简述具体目标，每项一句。"
+    },
+    {
+      "number": 4,
+      "heading": "实验内容",
+      "guidance": "概括本次要完成的具体任务及相互关系，区别于目的和逐步操作；不重复实验步骤。"
+    },
+    {
+      "number": 5,
+      "heading": "实验器材",
+      "guidance": "开发工具、编程语言、设备和实验环境等，必要配置可以用简表，避免冗长环境清单。"
+    },
+    {
+      "number": 6,
+      "heading": "实验步骤",
+      "guidance": "重点章节。按具体实验自然说明开展理由、设计选择、关键操作与真实过程；结果数值和结果图表主要交给第7节，不把过程写成操作名称列表。帮助理解操作的必要流程示意可放本节。"
+    },
+    {
+      "number": 7,
+      "heading": "实验数据及结果分析",
+      "guidance": "重点章节。集中呈现实验数据、结果表格、曲线、预测图等，并围绕这些结果作分析；按实验或问题设置自然小节，具体组织由规划者决定。规划每项实验需要回答的问题、支撑判断的比较和证据位置。成稿在本节解释观察的意义，并直接写出每项实验从数据得到的结论；少复述表格数字。"
+    },
+    {
+      "number": 8,
+      "heading": "总结及心得体会",
+      "guidance": "简短归纳第7节已经得出的结论，并写出有依据的学习体会。"
+    },
+    {
+      "number": 9,
+      "heading": "对本实验过程及方法、手段的改进建议",
+      "guidance": "简洁提出与实际过程相关的改进建议，区分建议与已做工作；不虚构个人经历或额外实验。"
+    }
+  ],
+  "emphasis": {
+    "section_numbers": [
+      6,
+      7
+    ],
+    "headings": [
+      "实验步骤",
+      "实验数据及结果分析"
+    ],
+    "policy": "两节合计占正文大部分篇幅，其他章节简洁；按内容需要规划预算，不为比例扩写，不新增比例验收门槛。"
+  },
+  "planning_guidance": "这是用户指定的缺省报告模板，不是教师额外提出的实验任务。使用九节顺序；第6节实验步骤和第7节实验数据及结果分析是主体，应合计占正文大部分篇幅。规划时先充分安排这两节，再分配其他节的简洁篇幅。第7节集中放置结果图表并分析，第6节叙述具体过程；必要的原理示意、流程示意和环境配置表可放其对应章节。各节内部结构、段落与子标题由你根据实验自主组织。第1节只填项目名称，不为预算扩写；第4节交代任务范围，第8、9节避免与第7节重复。",
+  "trailing_fields": [
+    {
+      "label": "本实验参考源代码如下",
+      "guidance": "保留模板的源码资料用途；按提交需要列已有源码文件索引或必要的关键片段，不把全部代码堆入正文，不另造第十章。"
+    }
+  ],
+  "typography": {
+    "version": 1,
+    "reference": "User report examples 17 MLP / 08 decision-tree; Song body, distinct bold headings",
+    "title_font_size": 20.5,
+    "body_family": "SimSun",
+    "heading_family": "SimHei"
+  },
+  "layout": {
+    "heading2_font_size": 14,
+    "body_leading_factor": 1.95,
+    "first_line_indent_chars": 2,
+    "paragraph_space_after": 3,
+    "caption_font_size": 10,
+    "table_font_size": 9,
+    "number_subheadings": true,
+    "image_max_height": 420
+  }
+}

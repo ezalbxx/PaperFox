@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>纸狐 · 实验报告</title><link rel="icon" href="/paperfox.svg" type="image/svg+xml"><link rel="stylesheet" href="/report.css"></head><body>
+<header><a id="homeLink" class="brand" href="/"><img src="/paperfox.svg" alt="">纸狐<span>实验报告</span></a><a class="studio-entry" id="studioEntry" href="/studio">选句改稿 ↗</a><span id="status" role="status">正在连接…</span></header>
+<main>
+<section id="intakeCard" hidden><p class="eyebrow">从实验材料，到一份完整报告</p><h1>把材料交给纸狐</h1><p class="muted">适用于已完成的实验。提交后我会整理材料，只向你询问必要问题，随后自动写作并生成 PDF。</p>
+<form id="createForm" class="card"><h2>选择你的材料库</h2><p class="muted">把指导书、模板、代码、结果、截图混放在同一个文件夹即可。Agent 会读取内容、检索和分类，你无需逐项标注用途。</p>
+<div class="library-path"><input id="libraryPath" required aria-label="材料库路径" placeholder="选择一个文件夹，或填写本机文件夹 / ZIP 路径"><button id="chooseLibrary" type="button" class="secondary">选择文件夹</button></div>
+<label class="spaced">这次要写哪份实验报告？（选填）<input id="newTitle" placeholder="库中只有一个实验时可以留空"></label>
+<label class="spaced">补充要求（选填）<textarea id="newInstructions" rows="3" placeholder="希望突出的结果、篇幅、需要包含的选做内容…"></textarea></label>
+<details><summary>学号、存放位置与费用</summary><label>学号（选填）<input id="studentId"></label><label>项目工作文件夹<input id="workspaceInput" required></label><label>本报告预算上限（USD 估算）<input id="maxCost" type="number" min="0.01" max="100" step="0.1" value="1"></label><p class="muted">包含整理、写作与修订；按内置计价表估算，实际扣费以 API 账单为准。达到上限会询问你，不自动增加。</p></details>
+<p id="createError" role="alert"></p><button id="createSubmit" type="submit">交给 Agent 整理并生成</button></form><section id="projectList" class="card" hidden><h2>继续已有报告</h2><div id="projects"></div></section></section>
+<section id="runView" hidden><section class="progress-card" aria-labelledby="heading"><p id="projectTitle" class="eyebrow">你的实验报告</p><h1 id="heading">正在读取进度</h1><p id="stageHint" class="muted">已保存的材料和回答会继续使用。</p><progress id="progress" max="5" value="0" aria-label="报告构建阶段"></progress><ol id="stages" class="stages" aria-label="报告构建阶段"></ol><p id="liveProgress" class="muted spaced" aria-live="polite"></p></section>
+<section id="replyBox" class="card" hidden aria-labelledby="questionHeading"><h2 id="questionHeading">需要你补充一点信息</h2><div id="questions"></div><label for="answer">你的回答</label><textarea id="answer" placeholder="可以按问题编号一起回答" rows="5"></textarea><div id="answerActions" class="actions"></div></section>
+<section id="pdfCard" class="card" hidden aria-labelledby="pdfHeading"><div class="pdf-head"><div><p class="eyebrow" id="pdfState">报告已生成</p><h2 id="pdfHeading">实验报告 PDF</h2></div><div class="actions"><a id="openPdf" class="button" target="_blank" rel="noopener">打开 PDF</a><a id="downloadPdf" class="button secondary" download>下载</a></div></div><iframe id="pdfPreview" title="实验报告 PDF 预览" loading="lazy"></iframe></section>
+<div id="errorBox" class="notice" hidden role="alert"><p id="error"></p></div><div class="actions"><button id="continue" hidden>开始生成完整报告</button></div>
+<details id="detailsBox" class="details"><summary>运行详情</summary><p id="usage"></p><div id="debug"></div><div id="history"></div><button id="stopRun" class="secondary" hidden>暂停生成</button></details></section>
+</main><script src="/report.js"></script></body></html>

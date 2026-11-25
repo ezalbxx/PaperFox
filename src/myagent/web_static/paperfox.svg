@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 80 80">
+  <!-- Side profile of the standing studio model, with flat folds for small icons. -->
+  <g stroke-linejoin="round">
+    <path fill="#a55a37" d="m42 49 13-7 11-13 3-12 5 12-2 14-9 13-15 5Z"/>
+    <path fill="#dc9056" d="m51 49 15-20 3-12 1 17-8 13Z"/>
+    <path fill="#f5e8d3" d="m66 29 3-12 5 12-4 5Z"/>
+    <path fill="#80503a" d="m31 52 5 2-3 13-5 1Zm20-2 5 2-3 12-5 1Z"/>
+    <path fill="#c47242" d="m19 34 14-4 17 5 6 12-4 11-15 2-12-6Z"/>
+    <path fill="#dc9056" d="m22 35 11-5 17 5-12 7Z"/>
+    <path fill="#ad613b" d="m38 42 12-7-1 18-12 7Z"/>
+    <path fill="#ad613b" d="m23 48 9 4-5 16-4 1Zm19 5 9-3-5 17-5 1Z"/>
+    <path fill="#44342e" d="m23 66 5-1-1 4-7 1Zm18-1 6-1-1 4-8 1Z"/>
+    <path fill="#eddbc1" d="m20 36 15 3-7 17-5-6Z"/>
+    <path fill="#c47242" d="m5 32 9-8 9-5 12 1 5 13-9 9-12-1Z"/>
+    <path fill="#e09a64" d="m5 32 18-13 12 1-12 8Z"/>
+    <path fill="#ae603c" d="m17 23 5-13 1 10Zm11 0 10-14-2 18Z"/>
+    <path fill="#e6c8a2" d="m28 23 10-14-7 14Z"/>
+    <path fill="#935741" d="m31 23 6-11-2 13Z"/>
+    <path fill="#f5e8d3" d="m6 33 15 2 15-3-7 9-11-1Z"/>
+    <path fill="#d6bda0" d="m21 35 15-3-7 9Z"/>
+    <path fill="#44342e" d="m3 31 6-1 1 3-4 2Z"/>
+    <path fill="none" stroke="#503830" stroke-width="1.6" stroke-linecap="round" d="M14 29q4-3 8 0"/>
+  </g>
+</svg>
