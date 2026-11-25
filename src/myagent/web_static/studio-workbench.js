@@ -76,6 +76,8 @@ function wrenderProgress(p){
  const pdf=wq('progressPdf');pdf.hidden=!p.report?.pdf;
  if(p.report?.pdf){pdf.href=wfile(p.report.pdf,true);pdf.download=p.title+'.pdf';}else pdf.removeAttribute('href');
  wq('journeyPhases').replaceChildren(...p.phases.map((phase,i)=>{const li=wn('li',undefined,phase.state);li.append(wn('span',phase.state==='done'?'✓':String(i+1),'phase-number'),wn('span',phase.name));if(phase.state==='current')li.setAttribute('aria-current','step');return li;}));
+ const source=wq('registeredLibrary');source.hidden=!p.material_directory;
+ source.textContent=p.material_directory?'本报告导入的材料目录：'+p.material_directory:'';
  const productionIssues=(p.issues||[]).filter(i=>i.severity==='major');
  const productionError=/\u5df2\u6682\u505c\u6a21\u578b\u54cd\u5e94|\u7528\u6237\u6682\u505c/.test(p.error)?'':p.error.replace(/^(?:ValueError|GuidanceReadError): /,'');
  wq('replaceGuidance').hidden=!p.can_replace_guidance;
@@ -155,8 +157,12 @@ async function wcreate(e){e.preventDefault();if(wb.creating)return;wq('createRep
  if(!wb.guidePath&&!wb.uploads.some(f=>f.role==='guidance')){wq('createReportError').textContent='请选择指导书文件，或在上传的文件旁将用途设为“实验指导书”。';wq('createReportError').hidden=false;return;}
  wb.creating=true;wq('createReportSubmit').disabled=true;wq('closeCreateReport').disabled=true;wq('createReportSubmit').textContent='正在接收材料…';wuploadRender();
  try{for(const file of wb.uploads){if(file.token)continue;try{await wsendFile(file);}catch(e){file.error=e.message;wuploadRender();throw e;}}
-  wq('createReportSubmit').textContent='正在建立报告…';const result=await wrequest('studio/create',{request_id:wb.batch,title:wq('reportTitleInput').value,mode,guidance_path:wb.guidePath,files:wb.uploads.map(f=>({token:f.token,role:f.role})),library_path:wb.libraryPath,student_id:wq('newReportStudentId').value,student:{name:wq('newReportStudentName').value},instructions:wq('reportInstructionsInput').value});
-  wq('createReportDialog').close();wb.uploads=[];wb.batch=crypto.randomUUID();wb.libraryPath='';wb.guidePath='';wq('chosenLibrary').hidden=true;wq('chosenGuide').hidden=true;wq('reportTitleInput').value='';wq('reportInstructionsInput').value='';wuploadRender();await wlibrary();await wselect(result.project,'progress');toast('材料已接收，纸狐开始制作，进度会自动保存。');
+  const payload={title:wq('reportTitleInput').value,mode,guidance_path:wb.guidePath,files:wb.uploads.map(f=>({token:f.token,role:f.role})),library_path:wb.libraryPath,student_id:wq('newReportStudentId').value,student:{name:wq('newReportStudentName').value},instructions:wq('reportInstructionsInput').value};
+  const signature=JSON.stringify(payload);
+  if(wb.createRequest?.signature!==signature)wb.createRequest={signature,id:crypto.randomUUID()};
+  wq('createReportSubmit').textContent='正在建立报告…';
+  const result=await wrequest('studio/create',{request_id:wb.createRequest.id,...payload});
+  wq('createReportDialog').close();wb.uploads=[];wb.batch=crypto.randomUUID();wb.createRequest=null;wb.libraryPath='';wb.guidePath='';wq('chosenLibrary').hidden=true;wq('chosenGuide').hidden=true;wq('reportTitleInput').value='';wq('reportInstructionsInput').value='';wuploadRender();await wlibrary();await wselect(result.project,'progress');toast('材料已接收，纸狐开始制作，进度会自动保存。');
  }catch(e){wq('createReportError').textContent=e.message;wq('createReportError').hidden=false;}finally{wb.creating=false;wq('createReportSubmit').disabled=false;wq('closeCreateReport').disabled=false;wq('createReportSubmit').textContent='开始制作 ↗';wuploadRender();}
 }
 async function wloadFiles(){wq('filesProjectName').textContent=wb.current?.title||'';wq('downloadBundle').href='/api/lab/bundle?'+new URLSearchParams({workspace,project});wq('downloadBundle').download='paperfox-'+project+'.zip';wb.files=await wrequest('studio/files');wb.filesAt=Date.now();const side=wq('sidebarTitle').querySelector('small');if(side&&wb.files.current_version)side.textContent='v'+wb.files.current_version+' · 正式报告';wrenderFiles();}

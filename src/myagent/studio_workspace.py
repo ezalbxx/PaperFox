@@ -18,6 +18,7 @@ from uuid import uuid4
 from .jobs import atomic_json
 from .guidance_material import guidance_pages
 from .lab_project import LabProject, digest, is_secret_material, now, scanned_guidance_error
+from .report_context import fingerprint
 
 PHASES = [('materials', '接收材料'), ('planning', '理解要求'), ('execution', '执行实验'),
           ('structure', '组织图文'), ('writing', '撰写报告'), ('formatting', '排版检查'), ('ready', '阅读与改稿')]
@@ -96,8 +97,22 @@ def create_project(workspace, data):
     if request_id:
         if len(request_id)>64 or any(c not in '0123456789abcdef-' for c in request_id):raise ValueError('无效创建请求')
         request_path=Path(workspace)/'.paperfox/requests'/f'{request_id}.json'
+        signature = fingerprint({key: data.get(key) for key in (
+            'mode', 'library_path', 'guidance_path', 'files', 'title', 'student_id',
+            'student', 'instructions', 'include_bonus', 'interpreter_id')})
         if request_path.exists():
-            return LabProject(workspace,json.loads(request_path.read_text(encoding='utf-8'))['project'])
+            recorded = json.loads(request_path.read_text(encoding='utf-8'))
+            existing = LabProject(workspace, recorded['project'])
+            if 'signature' in recorded:
+                same_request = recorded['signature'] == signature
+            else:
+                library = data.get('library_path')
+                registered = [Path(m['original']).resolve() for m in existing.data['materials']
+                              if m.get('original') and m['role'] in ('library', 'data')]
+                same_request = not library or Path(library).resolve() in registered
+            if not same_request:
+                raise ValueError('材料选择已变更，请重新提交新建报告。')
+            return existing
     mode = data.get('mode', 'report')
     if mode not in ('execute', 'report'):
         raise ValueError('无效项目模式')
@@ -137,7 +152,7 @@ def create_project(workspace, data):
     p.note('材料已接收，已建立独立报告项目', files=len(p.data['materials']))
     if request_path:
         request_path.parent.mkdir(parents=True,exist_ok=True)
-        atomic_json(request_path,{'project':p.id,'at':now()})
+        atomic_json(request_path,{'project':p.id,'signature':signature,'at':now()})
     # A successful import has a canonical input copy; release only these uploaded copies.
     for path, named, record in uploaded:
         path.unlink(missing_ok=True);named.unlink(missing_ok=True)
@@ -280,8 +295,10 @@ def progress(project, busy=False):
     percent = 100 if index == 6 and report else min(99,round((index+fraction)/6*100))
     pending = w.get('pending')
     if (p.get('studio', {}).get('mode') == 'report' and pending
-            and pending.get('kind') == 'budget'):
+            and not pending.get('checkpoint')):
         pending = None
+        if state == 'awaiting_user':
+            state = 'ready'
     questions = pending.get('questions',[]) if pending else []
     if not w and state == 'needs_input':questions = p.get('plan',{}).get('questions',[])
     activity = []
@@ -303,7 +320,9 @@ def progress(project, busy=False):
         if not project.file(raw).is_file():continue
         seen_previews.add(raw);previews.append({'path':raw,'name':Path(raw).name})
         if len(previews)==4:break
+    material_directory = next((m.get('original', '') for m in p.get('materials', []) if m['role'] == 'library'), '')
     return {'id':p['id'],'title':p['title'],'busy':busy,'status':state,'phase':PHASES[index][0],
+        'material_directory':material_directory,
         'can_replace_guidance':not busy and replaceable_guidance(project) is not None,
         'phase_index':index,'percent':max(0,min(100,percent)),'phases':[{'id':k,'name':'使用已有结果' if k=='execution' and p.get('studio',{}).get('mode')=='report' else n,
             'state':'done' if i<index else 'current' if i==index else 'pending'} for i,(k,n) in enumerate(PHASES)],

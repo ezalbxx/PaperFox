@@ -17,7 +17,7 @@ from .lab_project import digest,now
 from .guidance_material import SLIDES, guidance_pages, slide_pages
 
 
-TEXT={'.txt','.md','.csv','.json','.jsonl','.log','.py','.ipynb','.r','.m','.js','.ts','.yaml','.yml','.toml','.tex','.html','.xml','.sql','.c','.cpp','.h'}
+TEXT={'.txt','.md','.csv','.json','.jsonl','.log','.py','.ipynb','.r','.m','.js','.ts','.yaml','.yml','.toml','.tex','.html','.xml','.sql','.c','.cpp','.h','.dyd','.err','.var','.pro'}
 IMAGES={'.png','.jpg','.jpeg','.svg','.webp','.bmp'}
 from .word_material import GUIDES, WORD, word_pages
 
@@ -64,6 +64,8 @@ def passages(path, cache=None):
 
 def suggest(path,preview):
     name=path.name.lower();text=preview.lower()
+    if name in ('environment.txt', 'environment.md', 'environment.json', 'environment.log'):
+        return 'environment','environment record'
     if path.suffix.lower() in ('.zstd','.zst'):return 'sessions','compressed original session; searchable decoded lines'
     if path.suffix.lower() in IMAGES:return 'figures','image file; pixel content not classified'
     if path.suffix.lower() in {'.py','.ipynb','.r','.m','.js','.ts','.c','.cpp','.h','.sql'}:return 'code','source-code format'

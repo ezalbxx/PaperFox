@@ -315,9 +315,21 @@ class ReportWorkflow(LabPipeline):
                     normalize_block_sample_names(patch['block'])
         return result
 
-    @staticmethod
-    def blocking_questions(result):
+    @property
+    def unattended(self):
+        return self.project.data.get('studio', {}).get('mode') == 'report'
+
+    def blocking_questions(self, result):
+        if self.unattended:
+            return []
         return [q for q in result.get('questions', []) if q.get('blocking', True)]
+
+    def without_user_questions(self, stage, result):
+        if not self.unattended or not result.get('questions'):
+            return result
+        self.state.setdefault('unanswered_questions', []).append(
+            {'stage': stage, 'questions': copy.deepcopy(result['questions']), 'at': now()})
+        return {**result, 'questions': []}
 
     def defer_recovery(self, stage, error, **details):
         record = {'stage': stage, 'kind': error.kind, 'reason': error.reason, 'status':'open', **details}
@@ -530,7 +542,7 @@ class ReportWorkflow(LabPipeline):
                 payload={**payload,'previous_outputs':{**previous,'story_cards':scope_story_cards(cards,label_entries=True)}}
         if name in ('report_story_cards','report_designer'):
             prompt+='\nexperiment_overview保存实验概览与背景理解；source_context.guidance_pages补充未被要求引用的指导书原文，可以与teacher_pages合起来理解整体对象和各项任务。概览、教师要求与实际观察各有用途。组织过程与结果时，可以先考虑读者怎样认识这次实验的具体对象与任务，再判断哪些背景在此处有帮助。全文主线帮助说明各实验为何构成一组、各自起什么作用，具体技术细节围绕相应的局部问题展开。'
-        if name=='report_interviewer':
+        if name=='report_interviewer' and not self.unattended:
             prompt+='\nquestions中标注blocking:true仅限真正影响任务的未知个人事实/用户决定；可由Agent自主决定的普通篇章选择使用blocking:false并自行完成，不要求用户确认。'
         if name=='writer' and prompt.startswith(WRITE):
             prompt+='\n'+WRITER_SECTION_GUIDANCE
@@ -543,7 +555,11 @@ class ReportWorkflow(LabPipeline):
             prompt=prompt.replace('通过finish_stage交提纲，再等待用户认可；不能把自己的提交当用户确认。',
                 '通过finish_stage提交内部编排结果，控制器将自动进入写作。')
             prompt=prompt.replace('提交供用户讨论的提纲','提交内部写作编排').replace('并交样稿确认','')
-            prompt+='\n自动完整报告模式：依据现有材料和已答问题自行完成编排、配图与写作，不请求认可提纲/样稿，不再问是否继续。questions仅限材料里确实没有且影响结果的个人事实或重大决策；其他写作选择自主处理。'
+            prompt+='\n自动完整报告模式：依据现有材料和已答问题自行完成编排、配图与写作，不请求认可提纲/样稿，不再问是否继续。'
+            if self.unattended:
+                prompt+='\n本次不采访用户，questions 置空。先检索并读取已导入的材料；事实整理将确实缺失的关键证据记在 gaps。缩小到已有材料支持的报告范围，仍需遵守真实指导书和模板。实验结果只用实际运行证据，缺失的结果不作推演。'
+            else:
+                prompt+='questions仅限材料里确实没有且影响结果的个人事实或重大决策；其他写作选择自主处理。'
         if self.project.data.get('report_architecture_version',1)>=2 and name!='report_formatter' and not reflow and not focused_edit and not grounded and not payload.get('chapter_scope') and not (
                 self.experimental_revision and name in ('report_patcher','report_requirement_reviewer')):
             if not handoff:
@@ -600,7 +616,7 @@ class ReportWorkflow(LabPipeline):
             atomic_json(path,record)
             self.state.setdefault('policy_reviews',[]).append({k:v for k,v in record.items() if k!='review'}|{'path':str(path.relative_to(self.project.root))})
             self.project.save()
-        return result
+        return self.without_user_questions(name, result)
 
     def report_role_schema(self,name):
         if name=='report_formatter':return format_schema()
@@ -930,16 +946,21 @@ class ReportWorkflow(LabPipeline):
         if selected_guidance and not candidates:
             result = {'documents': [], 'summary': '使用已选指导书，目录中的文件按类型作为实验材料。', 'questions': []}
         else:
-            result=self.role('report_librarian',LIBRARIAN,{'title':p.data['title'],
+            prompt = LIBRARIAN
+            if self.unattended and selected_guidance:
+                prompt += '\n已指定实验指导书。课件、教材和其他实验的说明放入 reference；只有直接规定本次实验任务或验收的文件才补充为 guidance。'
+            result=self.role('report_librarian',prompt,{'title':p.data['title'],
                 'instructions':p.data['instructions'],'human_decisions':self.human_decisions(),
                 'selected_guidance':selected_guidance,
                 'documents':catalog[:40],'total_documents':len(catalog),'required_document_ids':list(by_id),
                 'classification_scope':'Only required_document_ids belong in documents; other files retain their indexed experiment categories.',
                 'library':library},validate,task_id='report:library')
-        if result.get('questions'):
+        if self.blocking_questions(result):
             self.checkpoint('intake',result)
             self.state['pending']['kind']='library';p.save()
             return False
+        if self.unattended and not selected_guidance and not any(r['role']=='guidance' for r in result['documents']):
+            raise StageUnresolved('materials', '已导入的材料里没有可用于本报告的实验指导书。')
         choose_documents(p,result['documents'])
         self.state['outputs']['library']=result
         self.state.pop('progress',None);self.requirement_loop.ensure();p.save()
@@ -1845,6 +1866,12 @@ reflow_context提供前一个相邻块及最近正文最后两句。前段也在
 
     def advance(self):
         p=self.project;lock=p.acquire()
+        pending = self.state.get('pending') or {}
+        if self.unattended and self.state['status'] == 'awaiting_user' and not pending.get('checkpoint'):
+            self.state['history'].append({'stage': self.state['stage'], 'pending': pending, 'at': now(),
+                'actor': 'workflow_migration', 'reason': '改为自动处理，不记录为用户答复'})
+            self.state.update(status='ready', pending=None)
+            p.save()
         if self.state['status']=='awaiting_user' or self.state['stage']=='done':
             lock.close();return self.snapshot()
         self.started=time.monotonic();self.initial_totals=dict(p.data['totals'])
@@ -1867,7 +1894,10 @@ reflow_context提供前一个相邻块及最近正文最后两句。前段也在
                     prior_stage=stage
                 self.debug_point(stage,'stage_started',details={'saved_outputs':list(self.state['outputs'])})
                 if stage=='intake':
-                    result=self.role('report_interviewer',INTAKE,self.payload(),self.validate_questions)
+                    if self.unattended:
+                        result = {'questions': [], 'mode': 'read_requirements_during_facts'}
+                    else:
+                        result=self.role('report_interviewer',INTAKE,self.payload(),self.validate_questions)
                     if not self.blocking_questions(result) and self.automatic:
                         self.state['outputs'][stage]=result;self.state['stage']='facts';p.save();continue
                     if not result.get('questions'):raise ValueError('协作试验首轮需要向用户本人提出需求问题')
@@ -1889,6 +1919,7 @@ reflow_context提供前一个相邻块及最近正文最后两句。前段也在
                             self.logger.log('report_facts_reused', source_project=source_project)
                     if not reused:
                         result=self.collect_facts()
+                    result = self.without_user_questions(stage, result)
                     self.state['outputs'][stage]=result;p.data['requirements']=result['requirements']
                     self.requirement_loop.ensure()
                     if self.blocking_questions(result):self.checkpoint(stage,result);break
@@ -2035,7 +2066,7 @@ reflow_context提供前一个相邻块及最近正文最后两句。前段也在
                 target=p.root/'outputs/report-recovery'/f'{run_id}-candidate.json'
                 target.parent.mkdir(parents=True,exist_ok=True);atomic_json(target,exc.candidate)
             self.state.update(status='needs_attention',error=exc.reason)
-            if exc.kind=='materials' and exc.questions:
+            if exc.kind=='materials' and exc.questions and not self.unattended:
                 questions=self.normalize_stage_result('unresolved',{}, {'questions':exc.questions})
                 self.validate_questions(questions)
                 self.checkpoint(self.state['stage'],questions)
