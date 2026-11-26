@@ -29,6 +29,12 @@
 - **把实验问题说清楚**。纸狐会在出稿前尝试处理措辞等可自行修订的问题。「实验与数据反馈」集中展示缺测、缺少依据的结果和影响结论的数据问题。
 - **保留改稿过程**。在原文上选句讨论，采用改稿后保留新版本，也可以比较历史版本。桌面工作台使用同一套本机报告库。
 
+## 生成效果对比
+
+下图并排展示 PaperFox 和 Claude Code 对同一组实验日志的报告原文，从防御性、逻辑组织和用词表达三个维度作对照。两边均使用 DeepSeek Flash，纸狐一栏采用历史成稿。
+
+[![PaperFox 与 Claude Code 的报告原文与三项写作对比](docs/assets/report-writing-comparison.png)](docs/assets/report-writing-comparison.png)
+
 ## 数据与模型
 
 报告保存在 `%LOCALAPPDATA%\PaperFox\Reports`，API Key 由 Windows 加密保存。用于撰写报告的材料会提交给所选模型，云端服务按其规则计费。纸狐支持多家云端模型和本地 Ollama。[查看支持格式、模型设置与源码启动方式](docs/guide.md)
