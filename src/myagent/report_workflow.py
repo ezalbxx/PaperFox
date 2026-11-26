@@ -12,6 +12,7 @@ import json
 import os
 import re
 import time
+from contextlib import closing
 from pathlib import Path
 from uuid import uuid4
 
@@ -93,9 +94,9 @@ class ReportMaterials:
     parameters={'type':'object','properties':{'operation':{'type':'string','enum':['list','search','read','read_many','events']},
         'category':{'type':'string'},'query':{'type':'string'},'id':{'type':'string'},
         'event_type':{'type':'string'},
-        'page':{'type':'integer'},'start_line':{'type':'integer'},'end_line':{'type':'integer'},'start_char':{'type':'integer'},'pointer':{'type':'string'},
+        'page':{'type':'integer'},'sheet':{'type':'string'},'start_line':{'type':'integer'},'end_line':{'type':'integer'},'start_char':{'type':'integer'},'pointer':{'type':'string'},
         'requests':{'type':'array','minItems':1,'maxItems':6,'items':{'type':'object','properties':{
-            'id':{'type':'string'},'page':{'type':'integer'},'start_line':{'type':'integer'},'end_line':{'type':'integer'},
+            'id':{'type':'string'},'page':{'type':'integer'},'sheet':{'type':'string'},'start_line':{'type':'integer'},'end_line':{'type':'integer'},
             'start_char':{'type':'integer'},'pointer':{'type':'string'}},'required':['id']}}},'required':['operation']}
 
     def __init__(self,project):
@@ -157,6 +158,24 @@ class ReportMaterials:
                 raise ValueError('未找到登记材料ID或完整登记路径：' + str(identifier)
                                  + ('；候选：' + hints if hints else '；先用list/search取得真实S编号'))
             path=self.project.file(item['path'])
+            from .spreadsheet_material import SPREADSHEETS, spreadsheet_passages
+            if path.suffix.lower() in SPREADSHEETS:
+                start = max(1, int(args.get('start_line', 1)))
+                end = min(int(args.get('end_line', start+79)), start+159)
+                chunks = []
+                remaining = 16000
+                with closing(spreadsheet_passages(path, sheet=args.get('sheet'), first_row=start, last_row=end)) as rows:
+                    for row in rows:
+                        row['text'] = row['text'][max(0, int(args.get('start_char', 0))):]
+                        if len(row['text']) > remaining:
+                            row['text'] = row['text'][:remaining]
+                            row['truncated'] = True
+                        chunks.append(row)
+                        remaining -= len(row['text'])
+                        if remaining <= 0:
+                            break
+                return ToolResult(output=json.dumps({'id':item['id'], 'path':item['path'], 'chunks':chunks,
+                    'line_unit':'worksheet rows', 'notice':'Original cells; formulas are not recalculated.'}, ensure_ascii=False))
             if path.suffix.lower() in ('.pdf','.doc','.docx'):
                 from .report_library import passages
                 chunks=[];size=0
@@ -518,9 +537,14 @@ class ReportWorkflow(LabPipeline):
             from .lab_template import heading_contract
             contract = heading_contract(self.project)
             payload = {**payload, 'heading_contract': contract}
+            if (payload.get('template') or {}).get('body_excerpt'):
+                prompt+='\n模板的 body_excerpt 是源文档片段。用真实标题和填写说明识别各栏职责；已有正文按本次要求保留，样例与占位字样只供理解格式。短栏即使使用自定义名称也遵循其职责：如果只指定简述问题与任务，就规划一次简洁概述，把原理和详细步骤交给承担这些职责的栏目。复合栏分工清楚，只在模板或实际论述需要时安排多个写作部分。'
             if not contract['strict']:
+                autonomy = ('已提供模板。结合指导书与候选结构，保留明确属于模板正文的顶层栏目名称和顺序；'
+                            '编号示例、填空文字与子标题不升为顶层章节；' if contract['suggested_headings'] else
+                            '按实验问题自主决定标题、数量、顺序及章节合并；')
                 prompt = prompt.replace('逐字保留学校模板的顶层章节与顺序；',
-                    '本轮没有明确的模板章节硬约束；按实验问题自主决定标题、数量、顺序及章节合并，解析候选仅供参考；')
+                    '本轮没有明确的模板章节硬约束；'+autonomy)
             prompt+='\n工具参数直接是{"result":{...}}。'
             prompt+='\n'+BACKGROUND_PLANNING_GUIDANCE
             if self.project.data.get('report_architecture_version',1)>=2:
@@ -546,6 +570,14 @@ class ReportWorkflow(LabPipeline):
             prompt+='\nquestions中标注blocking:true仅限真正影响任务的未知个人事实/用户决定；可由Agent自主决定的普通篇章选择使用blocking:false并自行完成，不要求用户确认。'
         if name=='writer' and prompt.startswith(WRITE):
             prompt+='\n'+WRITER_SECTION_GUIDANCE
+            opening=payload.get('part_plan') or {}
+            if opening.get('opening_plan_compacted'):
+                prompt+='\n当前短栏只执行focus指定的职责。材料中的完整机制、操作细节和指标公式供理解，不自动进入开头。章节已明确要求一个段落时，以一个text块完成。'
+                heading=payload.get('target_heading') or ''
+                if heading.isascii():
+                    from .report_section_policy import section_roles
+                    if section_roles(heading)==['objectives']:
+                        prompt+='\nFor this opening, state only the aim and main task. Name metrics in words. Put equations, settings, loading endpoints and measured outcomes in Methods or Results.'
             prompt+='\n当前为协作写作：图表由独立图表角色提供，不调用lab_figure。按figure_outputs/figure_outputs_full及collaboration找到已制作图。用户实际回答优先于采访者的建议，未获认可的建议不当成用户决定。'
             handoff=writing_handoff(self.project,payload) if self.experimental_revision else None
             if handoff:
@@ -1256,6 +1288,15 @@ class ReportWorkflow(LabPipeline):
                 result['reviewed_document_hash']=fingerprint(draft)
                 if any(i['severity']=='hard' for i in result['issues']):
                     result['status']='needs_material' if any(i.get('needs_material') for i in result['issues'] if i['severity']=='hard') else 'needs_revision'
+            if stage=='delivery' and self.automatic and p.data.get('studio'):
+                from .report_student_voice import check_student_voice
+                locked_ids={b['id'] for s in self.state['outputs'].get('sample',{}).get('sections',[]) for b in s['blocks']}
+                result['issues'].extend(
+                    {**issue,'severity':'hard','block_ids':[issue['block_id']]}
+                    for issue in check_student_voice(draft)['issues']
+                    if issue['block_id'] and issue['block_id'] not in locked_ids
+                    and issue['field'] in ('正文','图注','表注')
+                )
             if (stage=='outline' and p.data.get('report_architecture_version',1)>=2
                     and not any(i.get('needs_material') or i.get('code') for i in result['issues'])):
                 result.update(planning_advisory=True,deferred_to_delivery=copy.deepcopy(result['issues']))
@@ -1529,7 +1570,7 @@ reflow_context提供前一个相邻块及最近正文最后两句。前段也在
                 if not isinstance(patches,list):raise ValueError('需要patches数组')
                 if len(json.dumps(patches,ensure_ascii=False))>18000:raise ValueError('本轮仅提交局部差异，补丁过长')
                 updated=apply_local_patches(current,patches,ids,locked)
-                if mode=='editing':
+                if mode=='editing' or any(i['rule_id'].startswith('student_voice:') for i in unit['issues']):
                     from .report_section_policy import preserve_result_tables
                     preserve_result_tables(current,updated)
                 validator(updated)
@@ -1652,9 +1693,12 @@ reflow_context提供前一个相邻块及最近正文最后两句。前段也在
                     prompt+='\n'+FACTS_CURATION_GUIDANCE
                     if key=='requirements_environment' and not categories:
                         prompt+='\n本批只从指导书与模板提取任务、要求和实验全貌。实验代码和运行结果由后续批次补入；本批不要跨批读取或预写这些结果，claims可为空。gaps只记录指导书或模板确实缺失且影响任务的内容；留给后续批次核对的实现与结果不写入gaps。'
+                        prompt+='\n指导书要求交付计算指标时，在对应要求的 acceptance 中保留计算定义及指定的范围、基准和输入条件，供下一批直接使用。'
                     else:
                         if on_demand:prompt+='\n'+FACT_READING_GUIDANCE
                         prompt+='\n'+FACT_CHAIN_GUIDANCE
+                        if on_demand:
+                            prompt+='\n对照必做要求提取实测结果，识别仍需计算的指标，记录数值、适用范围，以及会影响结论的差异或异常。遇到分段趋势，明确哪些点支撑哪一结论；无直接记录时，结论聚焦现象及它对计算的影响，原因不写入事实解释。若指导书要求的指标可用 report_calculate 处理，就向工具提交原始 Excel 单元格和指导书指定的基准；即使发现基准缺失，也提交原定义，由工具返回不可算状态并在gaps记明缺项。选点依据来自原始记录。每个指标的计算回执都用对应事实交给后续写作，在该claim的calculation_id填真实工具回执id，source_ids包含该材料。'
                 def validate(result):
                     self.validate_facts({**result,'requirements':result.get('requirements') or requirements},
                                         allow_empty_claims=curated)
@@ -1671,6 +1715,9 @@ reflow_context提供前一个相邻块及最近正文最后两句。前段也在
             if key=='requirements_environment':requirements=result['requirements']
             for index,claim in enumerate(result.get('claims',[]),1):
                 row={**claim}
+                if on_demand and key=='material_on_demand':
+                    from .report_calculations import attach_calculation
+                    attach_calculation(self.project,row)
                 target=row.pop('existing_claim_id',None) if curated else None
                 if target is None:
                     claim_id=key+'-C'+str(index)
@@ -1772,7 +1819,7 @@ reflow_context提供前一个相邻块及最近正文最后两句。前段也在
         tool=ReportMaterials(self.project)
         for source in sources:
             path=self.project.file(source['path']);name=path.name.lower();category=source['category']
-            if path.suffix.lower() in ('.png','.jpg','.jpeg','.svg','.pdf','.npy','.npz','.pkl','.pt','.pth','.xlsx','.zip'):
+            if path.suffix.lower() in ('.png','.jpg','.jpeg','.svg','.pdf','.npy','.npz','.pkl','.pt','.pth','.zip'):
                 packet['sources'].append({'id':source['id'],'path':source['path'],'label':source.get('label'),
                     'notice':'Binary/image material; use appropriate viewer, not text decoding.'})
                 continue
@@ -1808,7 +1855,7 @@ reflow_context提供前一个相邻块及最近正文最后两句。前段也在
             else:
                 read=json.loads(tool.run({'operation':'read','id':source['id'],'start_line':1,
                     'end_line':26 if name=='summarize_v9.py' else 160},None).output)
-                view.update({k:read[k] for k in ('total_lines','start_line','excerpt','line_unit') if k in read})
+                view.update({k:read[k] for k in ('total_lines','start_line','excerpt','line_unit','chunks') if k in read})
             length=len(json.dumps(view,ensure_ascii=False))
             if size+length>115000:
                 packet['omitted_ids'].append(source['id']);continue
@@ -1959,7 +2006,7 @@ reflow_context提供前一个相邻块及最近正文最后两句。前段也在
                     else:
                         result=self.role('report_designer',OUTLINE,self.payload(),self.validate_new_outline)
                     if self.automatic:
-                        compact_opening_plan(result)
+                        compact_opening_plan(result,p.data.get('template'))
                     if p.data.get('report_architecture_version',1)>=2:
                         self.state['structure_observations']=structure_observations(result)
                     result=self.guarded(stage,result,self.validate_new_outline,semantic=not p.data.get('report_first_pass'))
@@ -1992,7 +2039,7 @@ reflow_context提供前一个相邻块及最近正文最后两句。前段也在
                 if stage=='writing':
                     if self.automatic and not p.data.get('report_design'):
                         from .report_section_policy import compact_opening_plan
-                        p.data['report_design']=compact_opening_plan(writing_design(self.state['outputs']['outline']))
+                        p.data['report_design']=compact_opening_plan(writing_design(self.state['outputs']['outline']),p.data.get('template'))
                         p.save()
                     if ('figures_full' not in self.state['outputs'] and p.data.get('report_first_pass')
                             and not self.state['outputs']['outline'].get('figure_plan')):
@@ -2027,6 +2074,9 @@ reflow_context提供前一个相邻块及最近正文最后两句。前段也在
                             mode='editing',locked=locked)
                     from .report_figure_assembly import assemble_figures
                     document=assemble_figures(p,document)
+                    if self.automatic and p.data.get('studio'):
+                        from .report_student_voice import resolve_student_name_cells
+                        document=resolve_student_name_cells(document,p.data.get('student'),locked)
                     validate_edit(document)
                     self.state['outputs']['editing_candidate']={'document':copy.deepcopy(document)};p.save()
                     chapter_only=self.chapter_review_enabled and p.data.get('report_review_scope','chapters')=='chapters'
@@ -2044,6 +2094,7 @@ reflow_context提供前一个相邻块及最近正文最后两句。前段也在
                     feedback=self.state.get('requirement_checks',{}).get('delivery',{}).get('latest',
                         {'issues':[],'semantic_review':'Content review not run in this layout-only invocation.'})
                     review={'issues':[{'block_id':(i.get('block_ids') or [''])[0],'severity':'major' if i['severity']=='hard' else 'minor',
+                        'rule_id':i.get('rule_id'),'needs_material':bool(i.get('needs_material')),
                         'reason':i['reason'],'suggestion':i['suggestion']} for i in feedback['issues']],
                         'summary':feedback.get('semantic_review','要求检查已记录')}
                     review['version']=p.data['report']['version'];p.data['reviews'].append(review)
@@ -2051,7 +2102,8 @@ reflow_context提供前一个相邻块及最近正文最后两句。前段也在
                     if self.automatic:
                         hard=any(i['severity']=='hard' for i in feedback['issues']) or any(
                             r['status']=='open' for r in self.state.get('deferred_recoveries',[]))
-                        hard = hard or p.data['report'].get('figure_qa',{}).get('status') == 'needs_attention'
+                        figures = p.data['report'].get('figure_qa',{}).get('figures',[])
+                        hard = hard or any(f.get('size_passed') is False for f in figures)
                         self.state.update(stage='delivery' if hard else 'done',status='needs_attention' if hard else 'completed',pending=None)
                         if hard:self.state['error']='完整报告已保存，仍有明确缺项待处理。'
                         p.save();break
@@ -2090,3 +2142,5 @@ reflow_context提供前一个相邻块及最近正文最后两句。前段也在
             self.state.setdefault('runs',[]).append({'id':run_id,'trace':str(trace.relative_to(p.root)),'stage':self.state['stage'],'status':self.state['status']})
             p.save();lock.close()
         return self.snapshot()
+
+

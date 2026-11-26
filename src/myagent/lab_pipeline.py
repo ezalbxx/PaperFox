@@ -850,7 +850,7 @@ class LabPipeline:
                         partial.data = {**p.data, 'template': {'headings': [s['heading'] for s in [*draft['sections'], chapter['sections'][0]]]},
                                         'requirements': [{**r, 'required': False} for r in p.data['requirements']]}
                         validate_document({**chapter, 'sections': [*draft['sections'], chapter['sections'][0]]}, partial)
-                        if spec.get('compact_opening'):
+                        if spec.get('compact_opening') and not spec.get('opening_form'):
                             from .report_section_policy import validate_opening_section
                             validate_opening_section(chapter['sections'][0])
                     chapter = self.write_report_part(WRITE + '''

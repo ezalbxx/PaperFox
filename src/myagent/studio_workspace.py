@@ -311,7 +311,26 @@ def progress(project, busy=False):
     draft = p.get('writing_draft') or {}
     review=p.get('reviews',[])[-1] if p.get('reviews') else {}
     issues = list(review.get('issues', [])) if report and review.get('version') == report['version'] else []
-    if report:
+    experiment_feedback = []
+    error = '' if busy else (w.get('error','') if w else p.get('last_error',''))
+    if report and p.get('studio'):
+        feedback = [i['reason'] for i in issues if i.get('needs_material')]
+        for gap in w.get('outputs', {}).get('facts', {}).get('gaps', []):
+            message = gap.get('text', '') if isinstance(gap, dict) else gap
+            if isinstance(message, str) and message.strip():
+                feedback.append(message.strip())
+        experiment_feedback = list(dict.fromkeys(feedback))
+        issues = []
+        if state == 'needs_attention' and raw_stage == 'delivery':
+            checks = w.get('requirement_checks', {}).get('delivery', {}).get('latest', {}).get('issues', [])
+            figures = report.get('figure_qa', {}).get('figures', [])
+            if not any(i.get('severity') == 'hard' for i in checks) and not any(
+                r.get('status') == 'open' for r in w.get('deferred_recoveries', [])
+            ) and not any(f.get('size_passed') is False for f in figures):
+                state = 'completed'
+            if error == '完整报告已保存，仍有明确缺项待处理。':
+                error = ''
+    elif report:
         issues.extend(report.get('student_voice_check', {}).get('issues', []))
     previews=[];seen_previews=set()
     image_paths=[a['path'] if isinstance(a,dict) else a for result in p.get('results',{}).values() for a in result.get('artifacts',[])]
@@ -328,11 +347,12 @@ def progress(project, busy=False):
             'state':'done' if i<index else 'current' if i==index else 'pending'} for i,(k,n) in enumerate(PHASES)],
         'stage':raw_stage,'detail':detail,'tasks':tasks,'activity':activity,'questions':questions,
         'pending_id':pending.get('id') if pending else None,'pending_checkpoint':bool(pending and pending.get('checkpoint')),
-        'error':'' if busy else (w.get('error','') if w else p.get('last_error','')),'usage':p['totals'],
+        'error':error,'usage':p['totals'],
         'created_at':p['created_at'],'updated_at':p['updated_at'],'studio':p.get('studio',{}),
         'report':{k:report[k] for k in ('version','pdf','sha256') if k in report} if report else None,
         'draft_sections':[{'heading':s['heading'],'blocks':len(s.get('blocks',[]))} for s in draft.get('sections',[])],
         'issues':issues,
+        'experiment_feedback':experiment_feedback,
         'previews':previews,
         'materials_count':len(p.get('materials',[])),'versions_count':len(p.get('revisions',[])),
         'resume_action':'studio' if p.get('studio') else 'report' if w else 'run'}

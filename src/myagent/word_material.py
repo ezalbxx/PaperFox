@@ -14,6 +14,23 @@ from .jobs import atomic_json
 WORD = {'.doc', '.docx'}
 GUIDES = WORD | {'.pdf'}
 OLE = bytes.fromhex('d0cf11e0a1b11ae1')
+MATH = '{http://schemas.openxmlformats.org/officeDocument/2006/math}'
+W = '{http://schemas.openxmlformats.org/wordprocessingml/2006/main}'
+
+
+def math_text(node):
+    if node.tag == MATH+'t':
+        return node.text or ''
+    if node.tag == MATH+'f':
+        return f'({math_text(node.find(MATH+"num"))})/({math_text(node.find(MATH+"den"))})'
+    if node.tag in (MATH+'sSub', MATH+'sSup', MATH+'sSubSup'):
+        base = math_text(node.find(MATH+'e'))
+        for tag, operator in (('sub', '_'), ('sup', '^')):
+            part = node.find(MATH+tag)
+            if part is not None:
+                base += operator+'{'+math_text(part)+'}'
+        return base
+    return ''.join(math_text(child) for child in node)
 
 
 def xml_pages(path):
@@ -23,7 +40,8 @@ def xml_pages(path):
     ns = '{http://schemas.openxmlformats.org/wordprocessingml/2006/main}'
     pages = [[]]
     for para in root.iter(ns+'p'):
-        for node in para.iter():
+        nodes = iter(para.iter())
+        for node in nodes:
             if node.tag == ns+'t':
                 pages[-1].append(node.text or '')
             elif node.tag == ns+'tab':
@@ -33,6 +51,10 @@ def xml_pages(path):
                     pages.append([])
             elif node.tag in (ns+'br', ns+'cr'):
                 pages[-1].append('\n')
+            elif node.tag == MATH+'oMath':
+                pages[-1].append(math_text(node))
+                for _ in range(sum(1 for _ in node.iter())-1):
+                    next(nodes)
         pages[-1].append('\n')
     # Some editors save no pagination. Keep long guides addressable by text part.
     chunks = []
@@ -46,6 +68,36 @@ def xml_pages(path):
             text = text[end:].lstrip('\n')
         chunks.append(text)
     return chunks
+
+
+def word_section_headings(path):
+    """Read level-one DOCX paragraph headings without flattening their hierarchy."""
+    if not zipfile.is_zipfile(path):
+        return []
+    with zipfile.ZipFile(path) as archive:
+        if 'word/document.xml' not in archive.namelist():
+            return []
+        root = ET.fromstring(archive.read('word/document.xml'))
+        if 'word/styles.xml' in archive.namelist():
+            styles = ET.fromstring(archive.read('word/styles.xml'))
+        else:
+            styles = ET.Element('styles')
+    top_styles = {'heading1'}
+    for style in styles.findall(W + 'style'):
+        level = style.find(f'{W}pPr/{W}outlineLvl')
+        if level is not None and level.get(W + 'val') == '0' and style.get(W + 'styleId'):
+            top_styles.add(style.get(W + 'styleId').casefold())
+    headings = []
+    for para in root.iter(W + 'p'):
+        level = para.find(f'{W}pPr/{W}outlineLvl')
+        style = para.find(f'{W}pPr/{W}pStyle')
+        is_top = (level.get(W + 'val') == '0' if level is not None else
+                  style is not None and style.get(W + 'val', '').casefold() in top_styles)
+        if is_top:
+            text = ''.join(t.text or '' for t in para.iter(W + 't')).strip()
+            if text:
+                headings.append(text)
+    return headings
 
 
 def binary_pages(path):
@@ -75,7 +127,7 @@ def word_pages(path, cache=None):
     path = Path(path)
     if cache is not None:
         key = hashlib.sha256(path.read_bytes()).hexdigest()
-        dest = Path(cache)/('word-v2-'+key+'.json')
+        dest = Path(cache)/('word-v3-'+key+'.json')
         if dest.is_file():
             return json.loads(dest.read_text(encoding='utf8'))
     with path.open('rb') as f:

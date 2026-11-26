@@ -66,5 +66,104 @@
       "origin": "user-writing-preferences-2026-11-08"
     }
   ],
-  "examples": []
+  "examples": [
+    {
+      "id": "project1-9",
+      "rule_ids": [
+        "W04",
+        "W05"
+      ],
+      "keywords": [
+        "时间序列",
+        "预处理",
+        "特征",
+        "输入"
+      ],
+      "context": "输入类型改变后，需要解释为何构建新的特征。",
+      "lesson": "先交代本次输入与待解决的问题，再介绍操作。",
+      "before": "脑区间的相关性刻画活动的同步变化，将时间序列转化为连接特征后，三种对比方法便可在固定维向量上进行分类。",
+      "after": "与前述多模态向量不同，ADNI-fMRI、FTD 和 OCD 为每名受试者提供的是脑区随时间变化的测量。因此，进入分类器之前，需要先将这些序列组织为受试者层面的特征。本文从脑区之间的联系提取连接特征，再根据分类器配置相应的区域统计量或协方差表示。",
+      "acceptance_status": "historical_applied_revision_user_approved_direction_not_final_gold",
+      "source": {
+        "thread_id": "01a18296-d13d-75b1-b295-b9acd1c1289e",
+        "path": "D:\\Project1\\PAPER_DRAFT\\中文稿31处引入修改_20261031.md",
+        "line": 95
+      }
+    },
+    {
+      "id": "project1-20",
+      "rule_ids": [
+        "W04",
+        "W05"
+      ],
+      "keywords": [
+        "尺度",
+        "对齐",
+        "融合",
+        "分支",
+        "评分"
+      ],
+      "context": "多个评分分支已生成，准备介绍输出尺度对齐。",
+      "lesson": "说明当前流程遇到的问题及操作理由，勿仅定义操作功能。",
+      "before": "训练 CDF 将各分支评分转换为其在训练参照分布中的相对位置，使不同分支的输出采用同一尺度。",
+      "after": "分支内部完成融合后，三个分支仍可能输出尺度不同的分数，直接相加会使数值范围影响分支贡献。为使后续权重更多地反映排序信息，我们用训练 CDF 将各分支评分转换到共同的相对位置尺度。",
+      "acceptance_status": "historical_applied_revision_user_approved_direction_not_final_gold",
+      "source": {
+        "thread_id": "01a18296-d13d-75b1-b295-b9acd1c1289e",
+        "path": "D:\\Project1\\PAPER_DRAFT\\中文稿31处引入修改_20261031.md",
+        "line": 205
+      }
+    },
+    {
+      "id": "project1-26",
+      "rule_ids": [
+        "W04",
+        "W05"
+      ],
+      "keywords": [
+        "排序",
+        "相关",
+        "评价",
+        "指标"
+      ],
+      "context": "已有性能比较，准备引入补充分析指标。",
+      "lesson": "先说明想观察什么，再解释指标定义。",
+      "before": "评分分析采用 Spearman 秩相关系数衡量模型对受试者的排序接近程度，数值越接近 1，排序越一致。",
+      "after": "AUC 增量说明预测有所改善，但还需要观察这种改善伴随着多大的排序变化。为此，我们用 Spearman 秩相关系数比较分支之间及基础与最终评分之间的受试者次序，再结合 AUC 解读这些变化。相关系数越接近 1，排序越一致。",
+      "acceptance_status": "historical_applied_revision_user_approved_direction_not_final_gold",
+      "source": {
+        "thread_id": "01a18296-d13d-75b1-b295-b9acd1c1289e",
+        "path": "D:\\Project1\\PAPER_DRAFT\\中文稿31处引入修改_20261031.md",
+        "line": 265
+      }
+    },
+    {
+      "id": "project1-31",
+      "rule_ids": [
+        "W04",
+        "W05"
+      ],
+      "keywords": [
+        "消融",
+        "修正",
+        "增量",
+        "对照"
+      ],
+      "context": "已有模型组合分析，准备单独考察表示修正。",
+      "lesson": "交代与前文的分工，明确比较要回答的问题。",
+      "before": "两项配对修正分别考察零值编码与协方差坐标替换带来的评分增量。图~\\ref{fig:residual} 以“保留修正减去移除修正”的 AUC 差定位其作用：",
+      "after": "分支组合之外，基础 PRRE 还加入了两项配对表示修正。为区分模型组合与表示替换各自带来的收益，图~\\ref{fig:residual} 单独比较保留和移除每项修正时的 AUC，定位它们在哪些任务中改善排序。图中以“保留修正减去移除修正”的 AUC 差表示净变化：",
+      "acceptance_status": "historical_applied_revision_user_approved_direction_not_final_gold",
+      "source": {
+        "thread_id": "01a18296-d13d-75b1-b295-b9acd1c1289e",
+        "path": "D:\\Project1\\PAPER_DRAFT\\中文稿31处引入修改_20261031.md",
+        "line": 315
+      }
+    }
+  ],
+  "source": {
+    "spec_sha256": "b019580d2bf4a24ece32872b51a1b6d658a19e1f03323cfd5ec921eb654ebfcf",
+    "excerpt_sha256": "773c359724ef31655bdf9b297f063e12765073e18c936afdceda2c45b5ad9b2d",
+    "note": "31 introductions and 2 clarifications exist in the source; four pairs are selected."
+  }
 }

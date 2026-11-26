@@ -1,11 +1,13 @@
 """Launch the report-only PaperFox distribution on Windows."""
 import argparse
 import ctypes
+from ctypes import wintypes
 import json
 import os
 from pathlib import Path
 import sys
 import tempfile
+import threading
 import traceback
 import urllib.request
 import webbrowser
@@ -13,10 +15,106 @@ import webbrowser
 from myagent.web import SERVICE, WisdomServer
 from myagent.web_session import WebHub
 
+DESKTOP_TITLE = "纸狐 PaperFox"
+
+
+class DesktopStartupError(RuntimeError):
+    pass
+
+
+def activate_desktop(pid):
+    """Restore the existing PaperFox window for the service that owns this library."""
+    user32 = ctypes.WinDLL("user32")
+    callback = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
+    user32.EnumWindows.argtypes = (callback, wintypes.LPARAM)
+    user32.GetWindowThreadProcessId.argtypes = (wintypes.HWND, ctypes.POINTER(wintypes.DWORD))
+    user32.GetWindowTextW.argtypes = (wintypes.HWND, wintypes.LPWSTR, ctypes.c_int)
+    user32.IsIconic.argtypes = (wintypes.HWND,)
+    user32.ShowWindowAsync.argtypes = (wintypes.HWND, ctypes.c_int)
+    user32.SetForegroundWindow.argtypes = (wintypes.HWND,)
+    user32.FlashWindow.argtypes = (wintypes.HWND, wintypes.BOOL)
+    window = None
+
+    @callback
+    def find(hwnd, _):
+        nonlocal window
+        owner = wintypes.DWORD()
+        user32.GetWindowThreadProcessId(hwnd, ctypes.byref(owner))
+        if owner.value == pid:
+            title = ctypes.create_unicode_buffer(128)
+            user32.GetWindowTextW(hwnd, title, len(title))
+            if title.value == DESKTOP_TITLE:
+                window = hwnd
+                return False
+        return True
+
+    user32.EnumWindows(find, 0)
+    if window is None:
+        return False
+    if user32.IsIconic(window):
+        user32.ShowWindowAsync(window, 9)  # SW_RESTORE
+    if not user32.SetForegroundWindow(window):
+        user32.FlashWindow(window, True)
+    return True
+
+
+def require_webview_runtime():
+    import winreg
+
+    key = r"Software\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}"
+    for hive, view in ((winreg.HKEY_LOCAL_MACHINE, winreg.KEY_WOW64_32KEY), (winreg.HKEY_CURRENT_USER, 0)):
+        try:
+            with winreg.OpenKey(hive, key, 0, winreg.KEY_READ | view) as handle:
+                version, _ = winreg.QueryValueEx(handle, "pv")
+            if version and version != "0.0.0.0":
+                return
+        except OSError:
+            continue
+    raise DesktopStartupError("请安装 Microsoft Edge WebView2 Runtime (Evergreen)，然后重新打开纸狐。")
+
+
+def run_desktop(server, url, state):
+    import webview
+
+    ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("PaperFox.Desktop")
+    icon = Path(sys.executable).resolve().with_name("PaperFox.ico")
+    webview.settings["ALLOW_DOWNLOADS"] = True
+    webview.settings["ALLOW_FILE_URLS"] = False
+    window = webview.create_window(DESKTOP_TITLE, url, width=1240, height=820, min_size=(420, 500),
+                                   text_select=True, background_color="#FFFFFF")
+    closing = threading.Event()
+
+    def can_close():
+        try:
+            server.lab.begin_shutdown()
+        except ValueError as exc:
+            ctypes.windll.user32.MessageBoxW(None, str(exc), "纸狐 PaperFox", 0x30 | 0x10000)
+            return False
+        closing.set()
+        return True
+
+    def serve_window():
+        server.serve_forever(poll_interval=.1)
+        if not closing.is_set():
+            window.destroy()
+
+    window.events.closing += can_close
+    thread = threading.Thread(target=serve_window, name="paperfox-local-service", daemon=True)
+    thread.start()
+    try:
+        webview.start(gui="edgechromium", private_mode=False, storage_path=str(state / "DesktopView"),
+                      icon=str(icon) if icon.is_file() else None)
+    finally:
+        closing.set()
+        server.shutdown()
+        thread.join(timeout=3)
+
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--no-browser", action="store_true")
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument("--desktop", action="store_true", help="Open an independent desktop window")
+    mode.add_argument("--no-browser", action="store_true", help="Start the service only, for local testing")
     parser.add_argument("--port", type=int, default=8786)
     parser.add_argument("--state-dir", type=Path, default=Path(os.environ["LOCALAPPDATA"]) / "PaperFox")
     parser.add_argument("--self-test", action="store_true", help=argparse.SUPPRESS)
@@ -43,18 +141,22 @@ def main():
     if args.self_test:
         runtime_check(state)
         return
-
-    def open_page(port):
-        url = f"http://127.0.0.1:{port}/studio"
-        print(url, flush=True)
-        if not args.no_browser:
-            webbrowser.open(url)
+    desktop = args.desktop or (getattr(sys, "frozen", False) and not args.no_browser)
+    if desktop:
+        require_webview_runtime()
 
     try:
         with urllib.request.urlopen(f"http://127.0.0.1:{args.port}/api/health", timeout=.4) as response:
             health = json.load(response)
         if health.get("service") == SERVICE and Path(health["workspace"]) == workspace:
-            open_page(args.port)
+            if desktop:
+                if activate_desktop(health["pid"]):
+                    return
+                raise DesktopStartupError("这个报告库的本机服务仍在运行，当前找不到桌面窗口。如果正在启动，请稍候再试。")
+            url = f"http://127.0.0.1:{args.port}/studio"
+            print(url, flush=True)
+            if not args.no_browser:
+                webbrowser.open(url)
             return
     except (OSError, ValueError, KeyError):
         pass
@@ -64,8 +166,14 @@ def main():
     except OSError:
         server = WisdomServer(("127.0.0.1", 0), hub)
     try:
-        open_page(server.server_port)
-        server.serve_forever(poll_interval=.3)
+        url = f"http://127.0.0.1:{server.server_port}/studio"
+        print(url, flush=True)
+        if desktop:
+            run_desktop(server, url, state)
+        else:
+            if not args.no_browser:
+                webbrowser.open(url)
+            server.serve_forever(poll_interval=.3)
     finally:
         server.lab.close()
         hub.close()
@@ -115,9 +223,9 @@ def runtime_check(state):
 if __name__ == "__main__":
     try:
         main()
-    except Exception:
+    except Exception as exc:
         traceback.print_exc()
         if "--self-test" not in sys.argv:
-            ctypes.windll.user32.MessageBoxW(None, "纸狐启动失败。请查看本机 PaperFox 目录中的 startup.log。",
-                                            "纸狐", 0x10)
+            message = str(exc) if isinstance(exc, DesktopStartupError) else "纸狐启动失败。请查看本机 PaperFox 目录中的 startup.log。"
+            ctypes.windll.user32.MessageBoxW(None, message, "纸狐", 0x10)
         raise SystemExit(1)

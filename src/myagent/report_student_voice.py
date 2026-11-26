@@ -1,9 +1,10 @@
 """Deterministic checks for recorded student-voice wording preferences."""
 from __future__ import annotations
 
+import copy
 import re
 
-VERSION = 1
+VERSION = 2
 
 VOICE_RULES = (
     ('material_source', re.compile(r'老师|教师(?!签字|模型|网络|信号|端|–学生|-学生|—学生|与学生模型|和学生模型)'),
@@ -23,6 +24,25 @@ _REFLECTION = re.compile(r'心得(?:体会)?|学习体会|个人体会|实验体
 _CONCLUSION = re.compile(r'总结|结论|主要发现')
 _LEADING_LABEL = re.compile(r'^\s*(?:\d+(?:\.\d+)*[.、]?\s*)?(心得体会|实验心得|学习体会|个人体会|实验体会|实验总结|总结|结论)\s*[：:]')
 _REFERENCES = re.compile(r'参考文献|参考资料|引用文献|bibliography|references', re.I)
+_REFLECTION_OPENING = re.compile(r'^\s*(?:本次实验中)?(?:我(?:最深的)?(?:的)?体会|(?:最深的)?体会|感受最深|收获最大)')
+_NAME_FIELDS = {'姓名', '学生姓名', '实验者姓名'}
+_NAME_PLACEHOLDERS = {'本人', '（本人）', '(本人)'}
+
+
+def resolve_student_name_cells(document, student, locked=()):
+    """Resolve only standalone self-name placeholders under an explicit name header."""
+    updated = copy.deepcopy(document)
+    name = (student or {}).get('name', '').strip()
+    for section in updated['sections']:
+        for block in section['blocks']:
+            if block.get('type') != 'table' or block.get('id') in locked:
+                continue
+            for index, header in enumerate(block.get('headers', [])):
+                if header.strip() in _NAME_FIELDS:
+                    for row in block.get('rows', []):
+                        if index < len(row) and row[index].strip() in _NAME_PLACEHOLDERS:
+                            row[index] = name or '—'
+    return updated
 
 
 def check_student_voice(document):
@@ -48,6 +68,7 @@ def check_student_voice(document):
         if _REFERENCES.search(heading):
             continue
         check(heading, heading, '章标题')
+        mixed_reflection = bool(_REFLECTION.search(heading) and _CONCLUSION.search(heading))
         reflection = bool(_REFLECTION.search(heading) and not _CONCLUSION.search(heading))
         for block in section.get('blocks', []):
             kind, bid = block.get('type', 'text'), block.get('id', '')
@@ -57,7 +78,8 @@ def check_student_voice(document):
                 check(value, heading, '小标题', bid)
             elif kind == 'text':
                 label = _LEADING_LABEL.match(value)
-                in_reflection = bool(_REFLECTION.search(label[1])) if label else reflection
+                in_reflection = (bool(_REFLECTION.search(label[1])) if label else
+                                 reflection or (mixed_reflection and bool(_REFLECTION_OPENING.match(value))))
                 check(value, heading, '正文', bid, reflection=in_reflection)
             elif kind == 'list':
                 for index, item in enumerate(block.get('items', []), 1):

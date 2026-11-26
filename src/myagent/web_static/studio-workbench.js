@@ -3,6 +3,13 @@
 const wb={view:'library',rows:[],current:null,filter:'all',archived:false,fileGroup:'materials',files:null,uploads:[],uploading:false,creating:false,refreshing:false,libraryPath:'',guidePath:'',setup:null,manageId:'',batch:crypto.randomUUID(),libraryAt:0};
 const wn=(tag,text,cls)=>{const n=document.createElement(tag);if(text!==undefined)n.textContent=text;if(cls)n.className=cls;return n;};
 const wq=id=>document.getElementById(id);
+function selectFilter(group, key, value){
+ for(const button of wq(group).children){
+  const active=button.dataset[key]===value;
+  button.classList.toggle('selected',active);
+  button.setAttribute('aria-pressed',String(active));
+ }
+}
 const wstatus=p=>p.busy?'制作中':({paused:'已暂停',interrupted:'可从断点继续',failed:'需要处理',needs_input:'等待补充',awaiting_user:'等待补充'}[p.status])||(p.status==='completed'||p.stage==='done'||p.status==='done'?'已完成':p.report?'待你看稿':({ready:'准备开始',planned:'已规划',needs_attention:'有待处理项',executed:'实验已完成'}[p.status]||'进度已保存'));
 const wbytes=n=>n>=1024**3?(n/1024**3).toFixed(1)+' GB':n>=1024**2?(n/1024**2).toFixed(1)+' MB':n>=1024?(n/1024).toFixed(1)+' KB':n+' B';
 const wtime=t=>{if(!t)return '刚刚';const d=new Date(t);return Number.isNaN(d.getTime())?'已保存':d.toLocaleString('zh-CN',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit',hour12:false});};
@@ -15,7 +22,8 @@ const foxCanvas=document.createElement('canvas');foxCanvas.tabIndex=0;
 foxCanvas.setAttribute('aria-label','纸狐三维动画，左右方向键可调整视角');
 const showFox=mountPaperFox(foxCanvas);
 function progressFox(p){
- const mode=p.busy?p.phase:p.phase==='ready'?'ready':'rest';
+ const complete=p.report&&!p.busy&&p.phase==='ready'&&['done','completed'].includes(p.status);
+ const mode=p.busy?(p.phase==='ready'?'delivery':p.phase):complete?'ready':'rest';
  showFox(wq('progressFox'),mode);
 }
 function wshow(view){
@@ -35,21 +43,58 @@ function wshow(view){
  wurl();
 }
 async function wlibrary(){
- const rows=await wrequest('studio/projects');wb.rows=rows;wb.libraryAt=Date.now();wq('documentCount').textContent=rows.filter(p=>!p.studio.archived).length;
- wrenderCards();let recent=wq('recentReports');if(!recent){recent=wn('div');recent.id='recentReports';wq('currentDocument').parentElement.append(recent);}
+ const rows=await wrequest('studio/projects');
+ const changed=!wb.libraryAt||JSON.stringify(rows)!==JSON.stringify(wb.rows);
+ wb.rows=rows;wb.libraryAt=Date.now();
+ if(changed)wrenderCards();let recent=wq('recentReports');if(!recent){recent=wn('div');recent.id='recentReports';wq('currentDocument').parentElement.append(recent);}
  recent.replaceChildren(wn('p','最近报告','recent-label'));
  for(const row of rows.filter(r=>!r.studio.archived).slice(0,5)){const a=wn('a',row.title,'recent-report-link');a.href=wlink(row.id,row.report?'editor':'progress');a.onclick=e=>{e.preventDefault();wselect(row.id,row.report?'editor':'progress').catch(werror);};recent.append(a);}
 }
 function wrenderCards(){
  const search=wq('projectSearch').value.trim().toLocaleLowerCase();const rows=wb.rows.filter(p=>!!p.studio.archived===wb.archived&&(!search||p.title.toLocaleLowerCase().includes(search))&&(wb.filter==='all'||wb.filter==='running'&&p.busy||wb.filter==='report'&&p.report||wb.filter==='starred'&&p.studio.starred));
- wq('libraryTotal').textContent=rows.length;wq('libraryHeading').firstChild.textContent=wb.archived?'已归档的报告 ':'我的报告 ';wq('toggleArchive').textContent=wb.archived?'↩ 返回报告库':'▱ 已归档';wq('reportCards').replaceChildren();wq('libraryEmpty').hidden=rows.length>0;
- if(!rows.length&&search){wq('libraryEmpty').querySelector('h3').textContent='没有找到这份报告。';wq('libraryEmpty').querySelector('p').textContent='换个关键词，或试试其他筛选。';}else{wq('libraryEmpty').querySelector('h3').textContent=wb.archived?'这里保存暂时收起的报告。':'为下一个实验，留一页空白。';wq('libraryEmpty').querySelector('p').textContent=wb.archived?'归档保留全部文件、历史版本和修改讨论。':'上传指导书、实验材料和模板，纸狐会从这里开始。';}
+ wq('libraryTotal').textContent=rows.length;wq('libraryHeading').firstChild.textContent=wb.archived?'已归档的报告 ':'我的报告 ';wq('toggleArchive').textContent=wb.archived?'‹ 返回报告库':'查看归档';wq('reportCards').replaceChildren();wq('libraryEmpty').hidden=rows.length>0;
+ const empty=wq('libraryEmpty');
+ const filtered=!!search||wb.filter!=='all';
+ empty.querySelector('h3').textContent=filtered?'没有匹配的报告':wb.archived?'没有已归档的报告':'还没有报告';
+ empty.querySelector('p').textContent=filtered?'试试修改关键词或筛选条件。':wb.archived?'归档的报告会显示在这里。':'新建报告后，可以在这里查看和编辑。';
+ wq('emptyCreate').hidden=filtered||wb.archived;
  for(const p of rows){
-  const card=wn('article',undefined,'report-card');const cover=wn('div',undefined,'report-card-cover');cover.setAttribute('role','button');cover.tabIndex=0;cover.setAttribute('aria-label','打开'+p.title);const go=()=>wselect(p.id,p.report?'editor':'progress').catch(werror);cover.onclick=go;cover.onkeydown=e=>{if(e.key==='Enter')go();};
-  const sheet=wn('div',undefined,'cover-sheet');sheet.append(wn('i'),wn('i'),wn('i'));sheet.insertAdjacentHTML('beforeend','<svg viewBox="0 0 100 35" aria-hidden="true"><path d="M0 30L22 20L45 24L70 9L100 3"/></svg>');cover.append(sheet,wn('span',p.report?'EXPERIMENT REPORT':'WORK IN PROGRESS','card-cover-label'));
-  const star=wn('button',p.studio.starred?'★':'☆','card-star'+(p.studio.starred?' starred':''));star.disabled=p.busy;star.setAttribute('aria-label',p.studio.starred?'取消收藏':'收藏报告');star.onclick=e=>{e.stopPropagation();wmanage(p.id,p.studio.starred?'unstar':'star').catch(werror);};cover.append(star);
-  const info=wn('div',undefined,'report-card-info'),title=wn('button',p.title,'report-card-title');title.onclick=go;const state=wn('span',(p.busy?'◌ ':'')+wstatus(p),'card-state'+(p.busy?' running':p.report?' attention':p.status==='failed'?' error':''));const meta=wn('div',undefined,'card-meta');meta.append(wn('span',`${p.materials_count} 份材料 · ${p.report?'v'+p.report.version:'尚未成稿'}`),wn('time',wtime(p.updated_at)));info.append(title,state,meta);
-  const bottom=wn('div',undefined,'card-bottom'),open=wn('button',p.report?'阅读与改稿 ↗':'查看制作进度 ↗'),settings=wn('button','•••');settings.setAttribute('aria-label','管理'+p.title);open.onclick=go;settings.onclick=()=>wsettings(p);bottom.append(open,settings);card.append(cover,info);if(p.busy){const line=wn('div',undefined,'card-progress'),fill=wn('i');fill.style.width=p.percent+'%';line.append(fill);card.append(line);}card.append(bottom);wq('reportCards').append(card);
+  const row=wn('article',undefined,'report-row');
+  const go=()=>wselect(p.id,p.report?'editor':'progress').catch(werror);
+  const info=wn('div',undefined,'report-row-info');
+  const title=wn('h3',p.title,'report-row-title');
+  const meta=wn('div',undefined,'report-row-meta');
+  meta.append(wn('span',p.materials_count+' 份材料'+(p.report?' · v'+p.report.version:'')),wn('time',wtime(p.updated_at)));
+  info.append(title,meta);
+
+  const tone=p.busy?' is-running':p.status==='failed'?' is-error':p.status==='needs_attention'?' needs-attention':p.report?' has-report':'';
+  const state=wn('span',wstatus(p),'report-state'+tone);
+  const actions=wn('div',undefined,'report-row-actions');
+  const open=wn('button',p.report?'阅读与改稿 ↗':'查看制作进度 ↗','ui-action report-open');
+  open.onclick=go;
+  const star=wn('button',p.studio.starred?'★':'☆','ui-action report-icon');
+  star.disabled=p.busy;
+  star.title='收藏报告';
+  star.setAttribute('aria-label',star.title);
+  star.setAttribute('aria-pressed',String(!!p.studio.starred));
+  star.onclick=()=>wmanage(p.id,p.studio.starred?'unstar':'star').catch(werror);
+  const settings=wn('button','⋯','ui-action report-icon');
+  settings.title='管理报告';
+  settings.setAttribute('aria-label','管理'+p.title);
+  settings.onclick=()=>wsettings(p);
+  actions.append(open,star,settings);
+  row.append(info,state,actions);
+
+  if(p.busy){
+   const line=wn('div',undefined,'report-progress'),fill=wn('i');
+   line.setAttribute('role','progressbar');
+   line.setAttribute('aria-label',p.title+'制作进度');
+   line.setAttribute('aria-valuenow',p.percent);
+   fill.style.width=p.percent+'%';
+   line.append(fill);
+   row.append(line);
+  }
+  wq('reportCards').append(row);
  }
 }
 async function wselect(id,view){
@@ -58,26 +103,40 @@ async function wselect(id,view){
  wq('sidebarTitle').replaceChildren(wn('span',wb.current.title),wn('small',wb.current.report?'v'+wb.current.report.version+' · 正式报告':'制作进行中'));
  wshow(view);if(view==='editor'){await window.PaperfoxEditor.open(id);wq('breadcrumbTitle').textContent=wb.current.title;const name=wq('sidebarTitle').firstElementChild;if(name)name.textContent=wb.current.title;}if(view==='progress')wrenderProgress(wb.current);if(view==='files')await wloadFiles();
 }
-const phaseHeadlines={materials:'材料已接收，准备出发。',planning:'先读懂，再动手。',execution:'让想法，在实验中发生。',structure:'让证据，找到自己的位置。',writing:'一段一段，写出实验的脉络。',formatting:'把内容，折成完整的一稿。',ready:'报告已生成，开始阅读吧。'};
-const phaseDescriptions={materials:'文件已存入这份报告，纸狐将开始理解指导书和可用材料。',planning:'阅读任务要求、梳理现有材料，把目标变成可以执行的安排。',execution:'编写并运行实验，保存真实结果、曲线和关键中间产物。',structure:'围绕实验问题安排章节，确定每幅图和每张表的用途。',writing:'依据实验过程与结果逐步成稿，让段落顺着问题自然展开。',formatting:'整合章节、处理图表，按照模板生成可阅读的报告。',ready:'现在可以阅读、选句讨论，聊到满意后把修改写进报告。'};
+const phaseHeadlines={
+ materials:'准备实验材料',planning:'理解实验要求',execution:'执行实验',
+ structure:'组织报告结构',writing:'撰写报告',formatting:'排版与检查',ready:'报告已完成',
+};
+const phaseDescriptions={
+ materials:'整理指导书和已导入的实验文件。',planning:'提取指导书中的要求，确定实验和报告任务。',
+ execution:'执行实验并保存结果。',structure:'安排报告章节、图表和对应证据。',
+ writing:'根据实验记录和结果撰写正文。',formatting:'检查章节和图表，生成 PDF。',
+ ready:'可以阅读正文、选句改稿或下载 PDF。',
+};
 function wrenderProgress(p){
  const complete=!!p.report&&!p.busy&&p.phase==='ready'&&['done','completed'].includes(p.status);
  if(wb.view==='progress')progressFox(p);
  const side=wq('sidebarTitle').querySelector('small');if(side)side.textContent=p.report?'v'+p.report.version+' · 正式报告':wstatus(p);
- wb.current=p;wq('journeyTitle').textContent=p.title;wq('journeySubtitle').textContent=p.studio.mode==='execute'?'指导书 → 实验执行 → 完整报告 → 对话改稿':'实验材料 → 图文组织 → 完整报告 → 对话改稿';wq('journeyStatus').textContent=wstatus(p);wq('journeyHeadline').textContent=phaseHeadlines[p.phase]||'进度已保存';wq('journeyDescription').textContent=phaseDescriptions[p.phase]||'';
- if(!p.busy&&p.status==='paused')wq('journeyHeadline').textContent='这一程，已替你留好断点。';
- if(!p.busy&&p.status==='failed')wq('journeyHeadline').textContent='遇到一点问题，进度还在。';
- if(!p.busy&&p.questions.length)wq('journeyHeadline').textContent='有个问题，想听听你的想法。';
- if(!p.busy&&p.status==='needs_attention')wq('journeyHeadline').textContent=p.report?'报告已保存，还有待处理项。':'有待处理项，进度已保存。';
- if(complete)wq('journeyDescription').textContent='打开正文继续打磨，或下载排版好的 PDF。每次采用修改，都会保留一个新版本。';
+ wb.current=p;wq('journeyTitle').textContent=p.title;const status=wq('journeyStatus');const label=wstatus(p);if(status.textContent!==label)status.textContent=label;wq('journeyHeadline').textContent=phaseHeadlines[p.phase]||'进度已保存';wq('journeyDescription').textContent=phaseDescriptions[p.phase]||'';
+ if(!p.busy&&p.status==='ready'&&p.phase==='materials')wq('journeyHeadline').textContent='等待开始制作';
+ if(p.busy&&p.phase==='ready'){wq('journeyHeadline').textContent='正在保存报告';wq('journeyDescription').textContent='保存正文和 PDF 后即可查看。';}
+ if(!p.busy&&p.status==='paused')wq('journeyHeadline').textContent='制作已暂停';
+ if(!p.busy&&p.status==='failed')wq('journeyHeadline').textContent='制作遇到问题';
+ if(!p.busy&&p.questions.length)wq('journeyHeadline').textContent='等待你的补充';
+ if(!p.busy&&p.status==='needs_attention')wq('journeyHeadline').textContent=p.report?'报告已保存':'当前进度已保存';
+ if(complete)wq('journeyDescription').textContent='可以阅读正文、选句改稿或下载 PDF。';
  wq('progressView').classList.toggle('is-running',p.busy);wq('progressView').classList.toggle('production-complete',complete);wq('journeyFill').style.width=p.percent+'%';wq('journeyPercent').replaceChildren(document.createTextNode(String(p.percent)),wn('span','%'));wq('journeyBar').setAttribute('aria-valuenow',p.percent);wq('journeyBar').setAttribute('aria-valuetext',`${p.phases[p.phase_index].name}，流程进度${p.percent}%`);
  wq('journeyDetail').textContent=p.detail.total&&p.busy?`${p.detail.label} · ${p.detail.completed}/${p.detail.total}${p.detail.topic?' · '+p.detail.topic:''}`:p.report?`当前已保存 v${p.report.version} · ${p.versions_count} 个历史版本`:'按已完成的阶段与任务更新，进度自动保存';
- wq('journeyPersistence').textContent=complete?'材料、正文和历史版本已保存。':p.busy?'可以离开页面，任务会在本机继续。':'材料与断点均已保存，可以稍后继续。';wq('pauseProduction').hidden=!p.busy;wq('resumeProduction').hidden=p.busy||p.questions.length>0||['done','completed'].includes(p.status);wq('resumeProduction').textContent=p.report?'继续处理待办 ↗':'继续已保存的任务 ↗';wq('progressRead').hidden=!p.report;
+ wq('journeyPersistence').textContent=complete?'报告和历史版本已保存。':p.busy?'可以离开页面，任务会在本机继续。':'进度已保存。';wq('pauseProduction').hidden=!p.busy;wq('resumeProduction').hidden=p.busy||p.questions.length>0||['done','completed'].includes(p.status);wq('resumeProduction').textContent=p.report?'继续处理待办 ↗':'继续已保存的任务 ↗';wq('progressRead').hidden=!p.report;
  const pdf=wq('progressPdf');pdf.hidden=!p.report?.pdf;
  if(p.report?.pdf){pdf.href=wfile(p.report.pdf,true);pdf.download=p.title+'.pdf';}else pdf.removeAttribute('href');
  wq('journeyPhases').replaceChildren(...p.phases.map((phase,i)=>{const li=wn('li',undefined,phase.state);li.append(wn('span',phase.state==='done'?'✓':String(i+1),'phase-number'),wn('span',phase.name));if(phase.state==='current')li.setAttribute('aria-current','step');return li;}));
  const source=wq('registeredLibrary');source.hidden=!p.material_directory;
  source.textContent=p.material_directory?'本报告导入的材料目录：'+p.material_directory:'';
+ const experimental=wq('experimentFeedback');
+ const notes=p.experiment_feedback||[];
+ experimental.hidden=p.busy||!notes.length;
+ experimental.querySelector('ul').replaceChildren(...notes.map(note=>wn('li',note)));
  const productionIssues=(p.issues||[]).filter(i=>i.severity==='major');
  const productionError=/\u5df2\u6682\u505c\u6a21\u578b\u54cd\u5e94|\u7528\u6237\u6682\u505c/.test(p.error)?'':p.error.replace(/^(?:ValueError|GuidanceReadError): /,'');
  wq('replaceGuidance').hidden=!p.can_replace_guidance;
@@ -86,10 +145,10 @@ function wrenderProgress(p){
  wq('productionError').hidden=!productionMessages.length;wq('productionError').textContent=productionMessages.join('\n\n');
  const reply=wq('productionReply');reply.hidden=p.busy||(!p.questions.length&&!p.pending_checkpoint);const pendingKey=p.pending_id||p.questions.map(q=>q.question).join('|');if(reply.dataset.pending!==pendingKey){reply.dataset.pending=pendingKey;wq('productionAnswer').value='';}wq('productionQuestions').replaceChildren(...p.questions.map(q=>wn('p',q.question)));if(p.pending_checkpoint&&!p.questions.length)wq('productionQuestions').append(wn('p','这一步等待你的意见。可以写下修改方向，或填写“认可”继续。'));
  wq('taskSummary').textContent=p.tasks.length?`${p.tasks.filter(t=>t.status==='done').length} / ${p.tasks.length} 项已保存`:'等待规划';wq('productionTasks').replaceChildren();
- for(const task of p.tasks){const row=wn('div',undefined,'production-task '+task.status),info=wn('div');info.append(wn('h4',task.title),wn('small',task.status==='done'?'结果已保存':task.status==='partial'?'已有部分结果，仍需补充':'等待执行'));row.append(wn('span',task.status==='done'?'✓':task.status==='partial'?'△':'○','task-icon'),info);wq('productionTasks').append(row);}if(!p.tasks.length)wq('productionTasks').append(wn('p','纸狐正在把材料整理成清楚的工作安排。任务确定后，会在这里逐项展开。','waiting-copy'));
+ for(const task of p.tasks){const row=wn('div',undefined,'production-task '+task.status),info=wn('div');info.append(wn('h4',task.title),wn('small',task.status==='done'?'结果已保存':task.status==='partial'?'已有部分结果，仍需补充':'等待执行'));row.append(wn('span',task.status==='done'?'✓':task.status==='partial'?'△':'○','task-icon'),info);wq('productionTasks').append(row);}if(!p.tasks.length)wq('productionTasks').append(wn('p','暂无实验任务。','waiting-copy'));
  wq('draftProgress').hidden=!p.draft_sections.length;wq('draftChapters').replaceChildren(...p.draft_sections.map(s=>wn('span','✓ '+s.heading,'draft-chapter')));
  const previewKey=JSON.stringify(p.previews||[]);wq('artifactPreviews').hidden=!(p.previews||[]).length;if(wq('artifactPreviewGrid').dataset.key!==previewKey){wq('artifactPreviewGrid').dataset.key=previewKey;wq('artifactPreviewGrid').replaceChildren(...(p.previews||[]).map(file=>{const button=wn('button'),img=wn('img');img.src=wfile(file.path);img.alt=file.name;button.append(img,wn('span',file.name));button.onclick=()=>wpreview(file.path,file.name);return button;}));}
- const activity=p.activity.slice().reverse(),key=JSON.stringify(activity);if(wq('productionActivity').dataset.key!==key){wq('productionActivity').dataset.key=key;wq('productionActivity').replaceChildren(...activity.map(a=>{const row=wn('div',undefined,'activity-item'),info=wn('div');info.append(wn('p',a.text),wn('time',wtime(a.at)));row.append(wn('i',undefined,'activity-point'),info);return row;}));if(!activity.length)wq('productionActivity').append(wn('p','开始制作后，真实保存的动态会出现在这里。','waiting-copy'));}
+ const activity=p.activity.slice().reverse(),key=JSON.stringify(activity);if(wq('productionActivity').dataset.key!==key){wq('productionActivity').dataset.key=key;wq('productionActivity').replaceChildren(...activity.map(a=>{const row=wn('div',undefined,'activity-item'),info=wn('div');info.append(wn('p',a.text),wn('time',wtime(a.at)));row.append(wn('i',undefined,'activity-point'),info);return row;}));if(!activity.length)wq('productionActivity').append(wn('p','暂无制作动态。','waiting-copy'));}
  wq('metricMaterials').textContent=p.materials_count+' 份';wq('metricVersions').textContent=p.versions_count+' 稿';wq('metricTokens').textContent=Number(p.usage.tokens||0).toLocaleString();wq('metricCost').textContent=p.usage.cost_cny!=null?'¥'+Number(p.usage.cost_cny).toFixed(3):'$'+Number(p.usage.cost_usd||0).toFixed(4);if(p.usage.cost_cny!=null&&p.usage.cost_usd>0)wq('metricCost').textContent+=' + $'+Number(p.usage.cost_usd).toFixed(3);
  if(p.usage.unpriced_calls)wq('metricCost').textContent=(p.usage.cost_cny!=null||p.usage.cost_usd>0)?wq('metricCost').textContent+' + 部分未计价':'暂无费用估算';
 }
@@ -169,10 +228,10 @@ async function wloadFiles(){wq('filesProjectName').textContent=wb.current?.title
 function wrenderFiles(){
  if(!wb.files)return;const search=wq('fileSearch').value.toLocaleLowerCase(),list=wq('filesList');list.replaceChildren();
  if(wb.fileGroup==='versions'){
-  for(const row of wb.files.versions.slice().reverse().filter(r=>!search||('v'+r.version+' '+wreason(r.reason)).toLocaleLowerCase().includes(search))){const line=wn('div',undefined,'file-row'),info=wn('div',undefined,'file-name'),title=wn('b','报告 v'+row.version);if(row.version===wb.files.current_version)title.append(wn('span','当前版本','version-current'));info.append(title,wn('small',wreason(row.reason)+(row.modified?' · '+wtime(row.modified*1000):'')));const preview=wn('button','查看'),download=wn('a','↓ PDF'),restore=wn('button','恢复为新稿');download.href=wfile(row.pdf,true);download.download='报告-v'+row.version+'.pdf';preview.onclick=()=>wpreview(row.pdf,'报告 v'+row.version);restore.disabled=wb.current?.busy||row.version===wb.files.current_version;restore.onclick=async()=>{try{restore.disabled=true;await wmanage(project,'restore',{version:row.version});await wloadFiles();toast('旧稿已保存为新的当前版本，其他版本与讨论都保留。');}catch(e){restore.disabled=false;werror(e);}};const compare=wn('button','对比当前');compare.disabled=row.version===wb.files.current_version;compare.onclick=()=>wcompare(row.version,wb.files.current_version);line.append(wn('span','v'+row.version,'version-badge'),info,preview,compare,download,restore);list.append(line);}
+  for(const row of wb.files.versions.slice().reverse().filter(r=>!search||('v'+r.version+' '+wreason(r.reason)).toLocaleLowerCase().includes(search))){const line=wn('div',undefined,'file-row'),info=wn('div',undefined,'file-name'),title=wn('b','报告 v'+row.version);if(row.version===wb.files.current_version)title.append(wn('span','当前版本','version-current'));info.append(title,wn('small',wreason(row.reason)+(row.modified?' · '+wtime(row.modified*1000):'')));const preview=wn('button','查看','ui-action'),download=wn('a','↓ PDF','ui-action'),restore=wn('button','恢复为新稿','ui-action');download.href=wfile(row.pdf,true);download.download='报告-v'+row.version+'.pdf';preview.onclick=()=>wpreview(row.pdf,'报告 v'+row.version);restore.disabled=wb.current?.busy||row.version===wb.files.current_version;restore.onclick=async()=>{try{restore.disabled=true;await wmanage(project,'restore',{version:row.version});await wloadFiles();toast('旧稿已保存为新的当前版本，其他版本与讨论都保留。');}catch(e){restore.disabled=false;werror(e);}};const compare=wn('button','对比当前','ui-action');compare.disabled=row.version===wb.files.current_version;compare.onclick=()=>wcompare(row.version,wb.files.current_version);const actions=wn('div',undefined,'file-row-actions');actions.append(preview,compare,download,restore);line.append(wn('span','v'+row.version,'version-badge'),info,actions);list.append(line);}
  }else{
   const rows=wb.files.files.filter(f=>f.group===wb.fileGroup&&(!search||f.name.toLocaleLowerCase().includes(search))).sort((a,b)=>b.modified-a.modified);
-  for(const file of rows){const line=wn('div',undefined,'file-row'),info=wn('div',undefined,'file-name'),image=/\.(png|jpg|jpeg|webp|svg|gif)$/i.test(file.name),icon=wn('span',image?'▧':file.extension.slice(1).slice(0,4).toUpperCase()||'FILE','file-icon'+(file.extension==='.pdf'?' pdf':image?' image':''));info.append(wn('b',file.name),wn('small',file.role?({guidance:'实验指导书',template:'报告模板',data:'实验材料',reference:'参考资料'}[file.role]||'实验材料'):file.path));const preview=wn('button','预览'),download=wn('a','↓ 下载');preview.onclick=()=>wpreview(file.path,file.name);download.href=wfile(file.path,true);download.download=file.name;line.append(icon,info,wn('span',wbytes(file.bytes)),preview,download);list.append(line);}
+  for(const file of rows){const line=wn('div',undefined,'file-row'),info=wn('div',undefined,'file-name'),image=/\.(png|jpg|jpeg|webp|svg|gif)$/i.test(file.name),icon=wn('span',image?'▧':file.extension.slice(1).slice(0,4).toUpperCase()||'FILE','file-icon'+(file.extension==='.pdf'?' pdf':image?' image':''));info.append(wn('b',file.name),wn('small',file.role?({guidance:'实验指导书',template:'报告模板',data:'实验材料',reference:'参考资料'}[file.role]||'实验材料'):file.path));const preview=wn('button','预览','ui-action'),download=wn('a','↓ 下载','ui-action');preview.onclick=()=>wpreview(file.path,file.name);download.href=wfile(file.path,true);download.download=file.name;const actions=wn('div',undefined,'file-row-actions');actions.append(preview,download);line.append(icon,info,wn('span',wbytes(file.bytes)),actions);list.append(line);}
  }if(!list.children.length){const empty=wn('div',undefined,'bench-empty');empty.style.border='0';empty.style.margin='0';empty.append(wn('span','▱'),wn('h3',search?'没有找到匹配项。':wb.fileGroup==='versions'?'第一稿还在路上。':'这里还没有文件。'),wn('p',wb.fileGroup==='materials'?'上传的材料会保存在这里。':'随着制作推进，保存的文件会陆续出现在这里。'));list.append(empty);}
 }
 function wreason(reason){if(!reason)return '已保存';if(reason.startsWith('selection-adopt'))return '采用了选句讨论中的改稿';if(reason.startsWith('selection-undo'))return '撤销了一次选句修改';if(reason.startsWith('user-restored-version'))return '从历史版本恢复 · 原稿保留';if(reason.includes('layout')||reason.includes('template'))return '模板与版式调整';if(reason.includes('chapter'))return '按章节规范整理正文';if(reason==='initial')return '第一份完整稿';return '正文与图文更新';}
@@ -246,7 +305,7 @@ exitConfirm.onclick=async()=>{
  try{
   await post('/api/shutdown',{confirmed:true});
   wb.exiting=true;
-  wq('paperfoxExitStatus').textContent='正在退出纸狐。请关闭此页面，稍等片刻后再升级或删除程序。';
+  wq('paperfoxExitStatus').textContent=window.pywebview?'正在退出纸狐…':'正在退出纸狐。请关闭此页面，稍等片刻后再升级或删除程序。';
   exitConfirm.hidden=true;exitCancel.hidden=true;
  }catch(e){
   error.textContent=e.message;error.hidden=false;exitConfirm.disabled=false;exitCancel.disabled=false;
@@ -263,15 +322,15 @@ wq('navManuscript').onclick=async()=>{try{wshow('library');await wlibrary();}cat
  }catch(e){werror(e);}
 };
 wq('backToLibrary').onclick=()=>wq('navManuscript').click();wq('navProduction').onclick=()=>{if(project)wselect(project,'progress').catch(werror);};wq('navReader').onclick=()=>{if(project&&wb.current?.report)wselect(project,'editor').catch(werror);};
-function wopenFiles(group='materials'){wb.fileGroup=group;wq('fileSearch').value='';for(const button of wq('fileFilters').children)button.classList.toggle('selected',button.dataset.group===group);if(project)wselect(project,'files').catch(werror);}
+function wopenFiles(group='materials'){wb.fileGroup=group;wq('fileSearch').value='';selectFilter('fileFilters','group',group);if(project)wselect(project,'files').catch(werror);}
 wq('navFiles').onclick=()=>wopenFiles();wq('navVersions').onclick=()=>wopenFiles('versions');wq('currentDocument').onclick=()=>{if(project)wselect(project,wb.current?.report?'editor':'progress').catch(werror);};
 wq('toggleOutline').onclick=()=>{const open=document.body.classList.toggle('outline-visible');wq('toggleOutline').setAttribute('aria-expanded',String(open));};wq('outline').addEventListener('click',e=>{if(e.target.closest('a')){document.body.classList.remove('outline-visible');wq('toggleOutline').setAttribute('aria-expanded','false');}});document.addEventListener('keydown',e=>{if(e.key==='Escape'){document.body.classList.remove('outline-visible');wq('toggleOutline').setAttribute('aria-expanded','false');}});
-wq('projectSearch').oninput=wrenderCards;wq('toggleArchive').onclick=()=>{wb.archived=!wb.archived;wrenderCards();};wq('projectFilters').onclick=e=>{const button=e.target.closest('[data-filter]');if(!button)return;wb.filter=button.dataset.filter;for(const b of wq('projectFilters').children)b.classList.toggle('selected',b===button);wrenderCards();};
+wq('projectSearch').oninput=wrenderCards;wq('toggleArchive').onclick=()=>{wb.archived=!wb.archived;wrenderCards();};wq('projectFilters').onclick=e=>{const button=e.target.closest('[data-filter]');if(!button)return;wb.filter=button.dataset.filter;selectFilter('projectFilters','filter',wb.filter);wrenderCards();};
 wq('pauseProduction').onclick=async()=>{try{await wrequest('pause',{});toast('已请求暂停，当前步骤和断点会保留。');await wrefresh();}catch(e){werror(e);}};
 wq('resumeProduction').onclick=async()=>{try{wq('resumeProduction').disabled=true;const p=wb.current;await wrequest(p.resume_action==='report'?'report/start':'start',{action:p.resume_action,automatic:true});await wrefresh();}catch(e){werror(e);}finally{wq('resumeProduction').disabled=false;}};
 wq('progressRead').onclick=()=>wselect(project,'editor').catch(werror);wq('progressFiles').onclick=()=>wopenFiles();
 wq('productionReply').onsubmit=async e=>{e.preventDefault();const text=wq('productionAnswer').value.trim();if(!text)return;const button=e.target.querySelector('button');button.disabled=true;try{await wrequest('studio/reply',{text,pending_id:wb.current.pending_id,decision:wb.current.pending_checkpoint?(/^(认可|同意|继续|通过|approve)[。.!！]?$/i.test(text)?'approve':'revise'):'answer',automatic:true});await wrefresh();}catch(e){werror(e);}finally{button.disabled=false;}};
-wq('fileFilters').onclick=e=>{const b=e.target.closest('[data-group]');if(!b)return;wb.fileGroup=b.dataset.group;wq('fileSearch').value='';for(const item of wq('fileFilters').children)item.classList.toggle('selected',item===b);wshow('files');wrenderFiles();};wq('fileSearch').oninput=wrenderFiles;wq('closeFilePreview').onclick=()=>{wq('filePreviewDialog').close();wq('filePreviewBody').replaceChildren();};
+wq('fileFilters').onclick=e=>{const b=e.target.closest('[data-group]');if(!b)return;wb.fileGroup=b.dataset.group;wq('fileSearch').value='';selectFilter('fileFilters','group',wb.fileGroup);wshow('files');wrenderFiles();};wq('fileSearch').oninput=wrenderFiles;wq('closeFilePreview').onclick=()=>{wq('filePreviewDialog').close();wq('filePreviewBody').replaceChildren();};
 wq('closeManageReport').onclick=()=>wq('manageReportDialog').close();wq('renameReportForm').onsubmit=async e=>{e.preventDefault();try{await wmanage(wb.manageId,'rename',{title:wq('renameReportInput').value});wq('manageReportDialog').close();toast('报告名称已保存。');}catch(e){werror(e);}};wq('archiveReportButton').onclick=async()=>{try{await wmanage(wb.manageId,wq('archiveReportButton').dataset.archived==='true'?'unarchive':'archive');wq('manageReportDialog').close();toast('报告库已更新，文件和历史版本都保留。');}catch(e){werror(e);}};
 window.addEventListener('popstate',()=>{const params=new URLSearchParams(location.search);const id=params.get('project'),view=params.get('view')||'editor';if(id===project&&view===wb.view)return;if(view==='library'||!id){project=id||'';wshow('library');wlibrary().catch(werror);}else wselect(id,view).catch(werror);});
 if(query.get('demo')==='1'){

@@ -75,7 +75,7 @@ class WisdomHandler(BaseHTTPRequestHandler):
                              "/api/lab/report/discussion", "/api/lab/report/memory"}
         return route in {"/", "/studio", "/api/health", "/api/paperfox/setup", "/api/lab/file",
                          "/api/lab/bundle", "/api/lab/state", "/api/lab/report/editor", "/api/lab/report/state", "/api/lab/report/discussions",
-                         "/api/lab/report/discussion", "/api/lab/report/memory"} or route.endswith(
+                         "/api/lab/report/discussion", "/api/lab/report/memory", "/paperfox-workbench.png"} or route.endswith(
                              (".css", ".js", ".svg"))
 
     def do_GET(self):
@@ -90,10 +90,11 @@ class WisdomHandler(BaseHTTPRequestHandler):
                       "/studio":"studio.html","/studio.js":"studio.js","/studio.css":"studio.css",
                       "/studio-workbench.js":"studio-workbench.js","/studio-workbench.css":"studio-workbench.css",
                       "/fox-scene.js":"fox-scene.js","/fox-motion.js":"fox-motion.js","/three.min.js":"three.min.js",
-                      "/paperfox.svg":"paperfox.svg"}
+                      "/paperfox.svg":"paperfox.svg", "/paperfox-workbench.png":"paperfox-workbench.png"}
             if route in assets:
                 path = STATIC/assets[route]
-                self.response(path.read_bytes(), mime=(mimetypes.guess_type(path.name)[0] or "text/plain")+"; charset=utf-8")
+                mime = "image/png" if path.suffix == ".png" else (mimetypes.guess_type(path.name)[0] or "text/plain")+"; charset=utf-8"
+                self.response(path.read_bytes(), mime=mime)
             elif route == '/api/lab/file':
                 from .lab_project import LabProject
                 path = LabProject(self.workspace(params), params['project']).file(params['path'])

@@ -193,3 +193,4 @@ class ReportRequirements:
                 'candidate_ids':slot['candidate_ids'],'needs_material':not bool(slot['candidate_ids'])})
         return {'status':'needs_material' if any(i['needs_material'] for i in issues) else 'needs_revision' if issues else 'satisfied',
             'issues':issues,'fulfilled':fulfilled,'stage':stage,'at':now(),'semantic_review':'not_run'}
+

@@ -4,7 +4,7 @@ from __future__ import annotations
 import copy
 import re
 
-VERSION = 13
+VERSION = 15
 
 PRINCIPLES_MAX_CHARS = 450
 EQUIPMENT_MAX_CHARS = 100
@@ -24,35 +24,95 @@ OPENING_RULES = {
         '完整推导、实现细节和对照结果在正文相应位置按需展开。'),
     '实验目的': (150, '提交一个 list 块。每项一句，直接写具体学习或研究目标；排版自动编号为 1. 2. 3.。'
         '按实际目标决定条数，整节建议约150字以内。'),
+    '实验目的及内容': (120, '提交一个编号 list 块，每项用一句话写指导书中的核心目标或本次实验的主要任务。'
+        '优先合并围绕同一装置或问题的学习目标。任务可用一句话同时交代主要测量和要评价的指标。'
+        '通常两到三项，合计约120字以内；定义和解释留在原理节。'
+        '全节以这一组条目一次交代清楚，无需另写导语、重复目标或再列步骤。'
+        '装置结构、公式、操作顺序、加载终点及其他具体取值留在正文相应位置；开头只交代任务和要评价的指标。'),
     '实验器材': EQUIPMENT_RULE,
 }
 
 
 def opening_rule(heading):
-    name = re.sub(r'^\s*[一二三四五六七八九十\d]+\s*[、.．]\s*', '', heading).strip(' ：:')
+    name = re.sub(r'^\s*(?:第[一二三四五六七八九十\d]+[章节]|[（(][一二三四五六七八九十\d]+[）)]|'
+                  r'(?:[一二三四五六七八九十\d]+|[IVXLCDM]+)\s*[、.．)）](?!\d))\s*',
+                  '', heading, flags=re.IGNORECASE).strip(' ：:')
     base = re.sub(r'\s*[（(][^()（）]*[）)]$', '', name).strip()
+    if name != base and set(section_roles(name)) - set(section_roles(base)):
+        return None
     if base in EQUIPMENT_HEADINGS:return EQUIPMENT_RULE
+    if (re.fullmatch(r'(?:实验|研究)?(?:目的|目标)\s*(?:以及|及|与|和|、|[/／])\s*(?:实验)?内容', base)
+            or re.fullmatch(r'(?:aim|objective|purpose)s?\s*(?:and|&|[/／])\s*(?:scope|tasks?)', base, re.I)):
+        return OPENING_RULES['实验目的及内容']
+    if re.fullmatch(r'(?:实验|研究|学习)?(?:目的|目标)|(?:experiment(?:al)?\s+)?(?:aim|objective|purpose)s?', base, re.I):
+        return OPENING_RULES['实验目的']
     return OPENING_RULES.get(name)
 
 
-def compact_opening_plan(outline):
+def template_opening_note(heading, template):
+    """Recognize a brief written instruction attached to this top-level heading."""
+    if heading not in (template or {}).get('headings', []):
+        return None
+    lines = [re.sub(r'^\s*#{1,6}\s+', '', line).strip().rstrip('：:')
+             for line in (template or {}).get('body_excerpt', '').splitlines() if line.strip()]
+    title = heading.strip().rstrip('：:')
+    if title not in lines or lines.index(title)+1 >= len(lines):
+        return None
+    note = lines[lines.index(title)+1].strip('（）() ')
+    roles = section_roles(heading)
+    if roles not in (['objectives'], ['support']) or len(note) > 240:
+        return None
+    prose = re.match(r'(?:(?:格式|要求)\s*[：:]\s*)?(?:请)?(?:用|以|写)一(?:个)?(?:自然)?段(?:话)?|'
+                     r'(?:write|use|in)\s+(?:a|one|a single)\s+(?:short\s+)?paragraph\b', note, re.I)
+    short_scope = (roles == ['support'] and re.match(r'(?:请)?(?:简述|简要说明|概述)', note)
+                   and re.search(r'问题|目的|目标', note) and re.search(r'任务|内容|要做|工作', note))
+    return (note.rstrip('。.'), bool(prose)) if prose or short_scope else None
+
+
+def compact_opening_plan(outline, template=None):
     """Reuse evidence associations when replacing verbose opening assignments."""
     for section in outline['sections']:
-        rule = opening_rule(section['heading'])
-        if rule is None:
-            continue
-        budget, focus = rule
         parts = section['parts']
+        if len(parts) == 1 and parts[0].get('opening_plan_compacted'):
+            continue
+        rule = opening_rule(section['heading'])
+        note = template_opening_note(section['heading'], template)
+        combined = set(section_roles(section['heading'])) == {'objectives','principles'}
+        if rule is None and not note and not combined:
+            continue
+        if note:
+            instruction, paragraph = note
+            budget, focus = 150, ('按本栏模板填写：'+instruction+'。用一至两句话交代本次要解决的问题和主要任务。此处只写目标与任务。'
+                '具体原理、公式、数值、操作顺序和结果由相应栏目承担。')
+            if paragraph:
+                focus += '模板明确指定一个段落，交付一个text块。'
+        elif combined:
+            budget, focus = PRINCIPLES_MAX_CHARS, ('本栏合写目的和原理，由同一个写作部分一次完成。开头用简短编号目标说明对象和任务，随后简述与后文直接相关的原理。'
+                '各职责只承担一次；目标只概括任务和要评价的指标，具体加载范围与操作条件留在方法。原理不重新列目标。整栏约半页。')
+            planned = '；'.join(row['focus'] for row in parts if row.get('focus'))
+            if planned:
+                focus += ' 原计划的主题供选材：'+planned
+        else:
+            budget, focus = rule
         part = {key: list(dict.fromkeys(item for row in parts for item in row.get(key, [])))
                 for key in ('task_ids', 'card_ids')}
         if parts and all('fact_refs' in row for row in parts):
             part['fact_refs']=list(dict.fromkeys(ref for row in parts for ref in row['fact_refs']))
         section['parts'] = [{**part, 'focus': focus, 'character_budget': budget,
-                             'detail_carriers': [], 'compact_opening': True}]
+                             'detail_carriers': [], 'opening_plan_compacted': True,
+                             **({'compact_opening': True} if rule and not note else {}),
+                             **({'opening_form': 'paragraph', 'compact_opening': True} if note and note[1] else {})}]
     return outline
 
 
-def validate_opening_section(section):
+def validate_opening_section(section, opening_form=None):
+    if opening_form == 'paragraph':
+        blocks = section['blocks']
+        text = blocks[0].get('text', '').strip() if len(blocks)==1 and blocks[0].get('type')=='text' else ''
+        if not text or not re.fullmatch(r'[^\r\n]+', text):
+            from .report_protocol import ProtocolError
+            raise ProtocolError(section['heading'] + '.blocks', '模板指定一个段落，请提交一个非空text块。', [b.get('type') for b in blocks])
+        return
     rule = opening_rule(section['heading'])
     if rule is None:
         return
@@ -110,6 +170,8 @@ DEFENSIVE_WRITING_GUIDANCE = (
     '只有指导书明确要求报告局限性，或该事实直接影响本次任务结论时，才用事实句简短交代。'
     '所有章节直接写对象、任务、条件、观察或结论，不解释本章“不讲什么”，不声明边界，不补防御性说明。'
     '编号优先使用“1.”、“2.”和“（1）”、“（2）”；正文和标题尽量不用中点“·”作为分隔符。'
+    '指导书要求的指标若缺少必要实测输入，在结果处用一句话交代缺失的量及指标状态。'
+    '这类事实句可以用“未记录”“未计算”或“无法计算”，不按 W01 判错，也不要求换同义词或补出数值。'
 )
 
 # Reserve deterministic matches for explicit defensive constructions.
@@ -125,7 +187,7 @@ IMPLEMENTATION_DETAILS_GUIDANCE = (
     '先判断它是否帮助读者理解当前操作或结论。必要的单个名称、变量、参数或语法符号可以保留，'
     '多项细节适合放进表格；教师明确要求或某段机制确实需要时，可以用短代码块说明。'
     '正文应把这些细节放在操作、观察和解释中，不因规则而删掉关键证据。'
-    '图表与正文联动：规划时给每张图指定所属的第六或第七节、要回答的问题和紧邻的解释位置；'
+    '图表与正文联动：规划时给每张图指定实际承担实验步骤、结果或分析的章节、要回答的问题和紧邻的解释位置；'
     'Writer先写图前引入，再放图，随后直接分析图中信息的意义。没有对应论述任务的图不插入。'
 )
 
@@ -197,7 +259,7 @@ ALIASES = [
     ('background', ('背景', '引言', '问题提出', 'background', 'introduction')),
     ('principles', ('原理', '理论', '基础知识', 'principle', 'theory')),
     ('environment', ('环境', '配置', '设备', '材料', '数据集', '器材', 'environment', 'setup', 'material', 'dataset')),
-    ('procedure', ('步骤', '方法', '设计', '过程', '实施', 'method', 'procedure', 'protocol', 'implementation')),
+    ('procedure', ('步骤', '方法', '设计', '过程', '实施', 'method', 'methodology', 'procedure', 'protocol', 'implementation')),
     ('results', ('结果', '观察', '现象', 'result', 'observation', 'finding')),
     ('analysis', ('分析', '讨论', 'analysis', 'discussion')),
     ('conclusion', ('总结', '结论', 'conclusion', 'summary')),
@@ -209,17 +271,19 @@ GUIDANCE = '''section_policy是用户当前明确的章节职责与版面规则�
 全篇默认不展示代码细节；仅教师明确要求或不可替代的关键机制保留最短片段。数学原理的必要公式不等于代码细节。
 技术解释采用直接、准确的书面语，避免“参数往哪走”“损失函数推着参数走”等比喻或拟人化表达，直接说明参数更新方向、梯度与优化器的作用。自然衔接依靠内容关系，不依靠形象化措辞；正常数学术语不因含方向、传播等字样被判为比喻。
 操作目的正面说明所探究的问题或所观察的现象，避免“已有结果还不能说明……所以还要……”“只说明……还需确认……”式铺垫；允许“为了探究……”“为了进一步确认……”等有具体目的的表达，不机械套用。结论直接陈述已有发现和认识，宣称范围与实验结果一致，不习惯性补防御式限定。检查和修订建议也遵守同一要求。
-不添加副标题、标题下说明行、导读小字、版本注、来源自证或正文小注。图片只属于第六、七节；其他章节需要引用时用文字或表格，不插图。caption仅用于图注或表注；不借注释塞入额外论证。
+不添加副标题、标题下说明行、导读小字、版本注、来源自证或正文小注。图片放在实际承担步骤、结果或分析的栏目，并遵循模板明确规定的位置。caption仅用于图注或表注；不借注释塞入额外论证。
 只写正文、模板规定的信息与必要图表；内部记录留后台。不要把页面界面提示或运行状态写入报告。除指导书明确要求外，不单列局限性、边界、未执行事项或未验证事项。'''
 GUIDANCE += '\n' + FINDING_PRESENTATION_GUIDANCE
-GUIDANCE += '\n独立的开头栏目各规划一个写作部分。' + '\n'.join(
+GUIDANCE += '\n独立的开头栏目各规划一个写作部分。下列短栏写法在模板未明确规定成文形式时适用。' + '\n'.join(
     f'{heading}：{instruction}' for heading, (_, instruction) in OPENING_RULES.items()
 )
 
 
 def section_roles(heading):
     normalized = str(heading).casefold()
-    matches = [role for role, words in ALIASES if any(w in normalized for w in words)]
+    matches = [role for role, words in ALIASES if any(
+        re.search(r'\b' + re.escape(w) + r'(?:s|es)?\b', normalized) if w.isascii() else w in normalized
+        for w in words)]
     return matches or ['support']
 
 

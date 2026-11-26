@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "myagent"
-version = "0.1.6"
-description = "PaperFox builds experiment reports from existing materials"
+version = "0.1.0"
+description = "A minimal, hackable coding agent for the AI lab course"
 requires-python = ">=3.10"
 dependencies = [
     "openai>=1.0",
@@ -18,9 +18,10 @@ pdf = ["PyMuPDF>=1.24", "reportlab>=4"]
 paperfox = [
     "openai==2.45.0", "PyMuPDF==1.28.0", "reportlab==5.0.1",
     "PyYAML==6.0.3", "matplotlib==3.10.6", "Pillow==12.3.0",
-    "python-pptx==1.0.2", "rapidocr-onnxruntime==1.4.4",
+    "python-pptx==1.0.2", "rapidocr-onnxruntime==1.4.4", "openpyxl==3.1.5",
 ]
-lab = ["PyMuPDF>=1.24", "reportlab>=4", "PyYAML>=6", "numpy>=1.24", "scikit-learn>=1.3", "matplotlib>=3.7", "Pillow>=10"]
+desktop = ["pywebview==6.2.1; platform_system == 'Windows'"]
+lab = ["PyMuPDF>=1.24", "reportlab>=4", "PyYAML>=6", "numpy>=1.24", "scikit-learn>=1.3", "matplotlib>=3.7", "Pillow>=10", "openpyxl>=3.1"]
 
 [project.scripts]
 myagent = "myagent.cli:main"

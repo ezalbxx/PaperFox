@@ -190,6 +190,12 @@ def registry(pipeline, role, finish, task_id=None):
         from .report_workflow import ReportMaterials
         if role != 'report_designer' or not pipeline.has_curated_planning_facts():
             tools.register(ReportMaterials(pipeline.project))
+        if role == 'report_facts' and task_id == 'report:material_on_demand':
+            from pathlib import Path
+            from .report_calculations import ReportCalculations
+            from .spreadsheet_material import SPREADSHEETS
+            if any(Path(s['path']).suffix.lower() in SPREADSHEETS for s in pipeline.project.data['report_sources']):
+                tools.register(ReportCalculations(pipeline.project))
         if role=='report_figures':
             from .lab_figures import LabFigures
             from .figure_references import FigureReferences

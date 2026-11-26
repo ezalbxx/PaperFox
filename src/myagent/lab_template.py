@@ -3,18 +3,44 @@ from __future__ import annotations
 
 import re
 import statistics
-from .word_material import WORD, word_pages
+from .word_material import WORD, word_pages, word_section_headings
 import json
 from pathlib import Path
 
 from .jobs import atomic_json
 
 
-SECTION = re.compile(r'^\s*(?:[一二三四五六七八九十]+[、．.]|\d+[、．.](?!\d))\s*[^\n]{2,65}')
+SECTION = re.compile(r'^\s*(?:第[一二三四五六七八九十\d]+[章节]|[（(][一二三四五六七八九十\d]+[）)]|'
+                     r'(?:[一二三四五六七八九十\d]+|[IVXLCDM]+)[、．.)）](?!\d))\s*[^\n]{2,65}')
 
 
 def docx_text(path):
     return '\n'.join(p['text'] for p in word_pages(path))
+
+
+def markdown_section_headings(text):
+    levels = {}
+    fence = ''
+    for line in text.splitlines():
+        marker = re.match(r'^ {0,3}(`{3,}|~{3,})(.*)$', line)
+        if fence:
+            if marker and marker[1].startswith(fence) and not marker[2].strip():
+                fence = ''
+            continue
+        if marker:
+            fence = marker[1]
+            continue
+        heading = re.match(r'^ {0,3}(#{1,6})\s+(.+?)\s*$', line)
+        if heading:
+            title = re.sub(r'\s+#+$', '', heading[2]).strip()
+            levels.setdefault(len(heading[1]), []).append(title)
+    if not levels:
+        return []
+    level = min(levels)
+    # A lone document title followed by peers is the common Markdown template form.
+    if level == 1 and len(levels[1]) == 1 and len(levels.get(2, [])) > 1:
+        return levels[2]
+    return levels[level]
 
 
 def read_template(project, documents):
@@ -56,6 +82,8 @@ def read_template(project, documents):
         with fitz.open(source) as pdf:
             texts = [p.get_text() for p in pdf]
             text = '\n'.join(texts)
+            spec['headings'] = list(dict.fromkeys(title.strip() for level, title, _ in pdf.get_toc()
+                                                  if level == 1 and title.strip()))
             section_pages = [i for i, t in enumerate(texts) if any(SECTION.match(line) for line in t.splitlines())]
             if section_pages and section_pages[0] > 0:
                 spec['cover_page'] = 1
@@ -78,14 +106,23 @@ def read_template(project, documents):
                 spec['page_size'] = [pdf[-1].rect.width, pdf[-1].rect.height]
     elif source.suffix.lower() in WORD:
         text = '\n'.join(p['text'] for p in word_pages(source,project.root/'extracted'))
+        spec['headings'] = list(dict.fromkeys(word_section_headings(source)))
     else:
         text = source.read_text(encoding='utf-8-sig')
-    for line in text.splitlines():
-        match = SECTION.match(line)
-        if match:
-            heading = match.group().strip().rstrip('：: ')
-            if heading not in spec['headings']:
-                spec['headings'].append(heading)
+        if source.suffix.lower() == '.md':
+            spec['headings'] = list(dict.fromkeys(markdown_section_headings(text)))
+    if not spec['headings']:
+        for line in text.splitlines():
+            match = SECTION.match(line)
+            if match:
+                heading = match.group().strip().rstrip('：: ')
+                if heading not in spec['headings']:
+                    spec['headings'].append(heading)
+    if text.strip():
+        excerpt = text.strip()
+        spec['body_excerpt'] = excerpt[:4000]
+        if len(excerpt) > 4000:
+            spec['body_excerpt_truncated'] = True
     for label in ('报告评分', '指导教师签字'):
         if label in text:
             spec['signature_labels'].append(label)

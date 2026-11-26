@@ -113,10 +113,9 @@ class LabHarness:
         if args['operation'] == 'install_skill':
             home = self.project.root/'work/harness-home'
             sources = []
-            mirror_path = os.environ.get('MYAGENT_COURSE_SKILL_MIRROR')
-            mirror = Path(mirror_path) if mirror_path else None
+            mirror=Path('D:/workspace/ai_exp1_harness/grill-src')
             provenance={'method':'existing course skill files','upstream':None,'commit':None}
-            if mirror is not None and (mirror/'.git').is_dir():
+            if (mirror/'.git').is_dir():
                 clone=self.project.root/'work/course-skill-source'
                 if not clone.exists():
                     result=fixed_run(['git','clone','--local','--no-checkout',str(mirror),str(clone)],timeout=30)

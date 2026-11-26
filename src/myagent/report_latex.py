@@ -116,7 +116,7 @@ def _preamble(template: dict, layout: dict, bundled_fonts=False) -> str:
             ),
             r"\setlength{\parindent}{%.2fbp}" % (body * indent),
             r"\setlength{\parskip}{%.2fbp}" % space_after,
-
+            
             r"\setlength{\LTpre}{6bp}\setlength{\LTpost}{6bp}",
             r"\renewcommand{\arraystretch}{1.25}",
             r"\makeatletter",

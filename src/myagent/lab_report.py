@@ -77,12 +77,18 @@ def validate_document(document, project):
         raise ValueError('报告需要title和sections')
     from .lab_template import validate_sections
     validate_sections(document, project)
+    opening_forms = {s['heading']: part['opening_form']
+                     for s in (project.data.get('report_design') or {}).get('sections', [])
+                     for part in s.get('parts', []) if part.get('opening_form')}
     seen = set()
     requirements = {r['id'] for r in project.data['requirements']}
     results = set(project.data['results'])
     for section in document['sections']:
         if not section.get('heading') or not section.get('blocks'):
             raise ValueError('每节需要heading与blocks')
+        if section['heading'] in opening_forms:
+            from .report_section_policy import validate_opening_section
+            validate_opening_section(section, opening_forms[section['heading']])
         for block in section['blocks']:
             bid = block.get('id', '')
             if not bid or bid in seen:
@@ -437,3 +443,4 @@ def render_report(project, document, *, reason='initial', layout=None, backend='
     project.data['revisions'].append({'version': version, 'pdf': manifest['pdf'], 'reason': reason})
     project.save()
     return manifest
+

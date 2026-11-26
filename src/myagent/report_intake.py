@@ -5,6 +5,7 @@ from pathlib import Path
 from .jobs import atomic_json
 from .guidance_material import guidance_pages
 from .lab_project import LabProject, digest, now
+from .spreadsheet_material import SPREADSHEETS
 
 
 def prepare_report(project):
@@ -39,7 +40,7 @@ def prepare_report(project):
             suffix=path.suffix.lower()
             category=('figures' if suffix in ('.png','.jpg','.jpeg','.svg') else
                       'code' if suffix in ('.py','.ipynb','.r','.m','.js') else
-                      'results' if suffix in ('.csv','.json','.jsonl','.txt','.log','.md') else 'data')
+                      'results' if suffix in {'.csv','.json','.jsonl','.txt','.log','.md'} | SPREADSHEETS else 'data')
             groups[category].append(path)
     records=[]
     for index,(category,paths) in enumerate(groups.items(),1):

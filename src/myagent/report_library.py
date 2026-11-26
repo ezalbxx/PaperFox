@@ -15,6 +15,7 @@ from pathlib import Path
 from .jobs import atomic_json
 from .lab_project import digest,now
 from .guidance_material import SLIDES, guidance_pages, slide_pages
+from .spreadsheet_material import SPREADSHEETS, spreadsheet_passages
 
 
 TEXT={'.txt','.md','.csv','.json','.jsonl','.log','.py','.ipynb','.r','.m','.js','.ts','.yaml','.yml','.toml','.tex','.html','.xml','.sql','.c','.cpp','.h','.dyd','.err','.var','.pro'}
@@ -26,7 +27,9 @@ DOCUMENTS = GUIDES | SLIDES
 
 def passages(path, cache=None):
     """Yield extracted chunks with original page or physical-line anchors."""
-    if path.suffix.lower()=='.pdf':
+    if path.suffix.lower() in SPREADSHEETS:
+        yield from spreadsheet_passages(path)
+    elif path.suffix.lower()=='.pdf':
         import fitz
         with fitz.open(path) as pdf:
             for number,page in enumerate(pdf,1):
@@ -66,6 +69,8 @@ def suggest(path,preview):
     name=path.name.lower();text=preview.lower()
     if name in ('environment.txt', 'environment.md', 'environment.json', 'environment.log'):
         return 'environment','environment record'
+    if path.suffix.lower() in SPREADSHEETS:
+        return 'results','spreadsheet cells with worksheet and row anchors'
     if path.suffix.lower() in ('.zstd','.zst'):return 'sessions','compressed original session; searchable decoded lines'
     if path.suffix.lower() in IMAGES:return 'figures','image file; pixel content not classified'
     if path.suffix.lower() in {'.py','.ipynb','.r','.m','.js','.ts','.c','.cpp','.h','.sql'}:return 'code','source-code format'

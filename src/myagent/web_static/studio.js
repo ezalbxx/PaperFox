@@ -168,6 +168,9 @@ for(const b of $('suggestions').querySelectorAll('button'))b.onclick=()=>{$('dis
 $('locateSelection').onclick=()=>{const t=currentThread();if(t){switchView('reading');document.getElementById('block-'+t.anchor[0].blockId)?.scrollIntoView({behavior:'smooth',block:'center'});}};
 $('navManuscript').onclick=()=>{closeDiscussion();switchView('reading');};
 $('readingTab').onclick=()=>switchView('reading');$('pdfTab').onclick=()=>switchView('pdf');$('showAbout').onclick=()=>$('aboutDialog').showModal();$('closeAbout').onclick=()=>$('aboutDialog').close();
+$('pdfLink').addEventListener('click',event=>{
+ if(window.pywebview){event.preventDefault();switchView('pdf');}
+});
 $('tryExample').onclick=()=>{location.href='/studio?'+new URLSearchParams({workspace,demo:'1'});};
 $('dismissNotice').onclick=()=>$('previewNotice').hidden=true;
 $('newReport').onclick=()=>location.href='/report?'+new URLSearchParams({workspace});

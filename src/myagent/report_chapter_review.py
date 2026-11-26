@@ -19,6 +19,7 @@ chapter_scope给出本章职责。优先检查：内容是否属于本章；原�
 原理可支持解释，未做的因果/模型能力对照不得成为已证结论。纠正错误或删除多余内容，不能通过添加“可能、未验证、不能说明”等免责段修复。
 结果分析优先检查每项实验是否从已有比较或观察得出了正文中明确的结论。只陈列图表、复述数值或把结论留到总结时，指出具体实验并说明哪项已有证据可用于推理。检查段首是否通过否定上一任务来引入新任务，以及“断言”等实现术语是否盖过操作目的。修订时保留关键实验过程或发现。既有必要公式和有依据的原理解释不自动算代码细节或防御性文字。
 判定W01时看句子的用途。能解释改进建议的真实故障、尚未完成的对照或样本条件应保留；只有措辞偏好时记soft。
+结果处若已用一句话说明必交指标缺少哪个实测输入，保留这句。不要以W01要求删除，也不要以章节缺项要求填入替代基准、估算值或额外测量。
 caption只说明读图条件；普通数据制图的来源留元数据，不要求图注加“重绘、已核验、非截图”等小字。没有看过图片像素，不猜图像外观；不得要求额外实验、审计、统计或学生补充现有原件。
 不要按字符数机械判错，不把普通措辞偏好升为hard。硬问题必须给具体块ID、原文和违反本章职责/事实的理由；同类问题合并。
 最多4项：明确事实错误、用户禁止内容、本章缺失的关键任务为hard；可选措辞为soft。只用finish_stage提交{issues:[{rule_id,severity,block_ids,quote,reason,suggestion,needs_material:false}],summary}。无硬问题可以通过，不为显示检查工作强加问题。'''
@@ -126,9 +127,12 @@ def review_chapter(workflow, document, *, section_index, section_spec):
         sources=[s for s in sources if not known.get(s['source_id'],{}).get('task_ids') or
                  set(known[s['source_id']]['task_ids']).intersection(task_ids)]
     evidence=w.result_package(task_ids or None,compact=True)
-    # The current manuscript is what is checked; old model interpretations
-    # must not be reintroduced as answers to reproduce during local repair.
-    for result in evidence.get('results',{}).values():result.pop('analysis',None)
+    # Preserve program-calculated inputs without reinstating old model interpretations.
+    for result in evidence.get('results',{}).values():
+        analysis=result.pop('analysis',{})
+        calculated={claim['calculation']['id']:claim['calculation'] for claim in analysis.get('claims',[])
+                    if claim.get('calculation')}
+        if calculated:result['calculations']=list(calculated.values())
     teacher=[]
     materials=p.root/'materials.json'
     if materials.exists():

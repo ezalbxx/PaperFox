@@ -2,13 +2,14 @@
 from __future__ import annotations
 import copy
 import json
+import re
 from .jobs import atomic_json
 from .report_section_policy import IMPLEMENTATION_DETAILS_GUIDANCE, DEFENSIVE_WRITING_GUIDANCE
 from .lab_project import now
 from .report_context import fingerprint
 from .report_policy_review import review_contract, VERSION as POLICY_VERSION
 
-VERSION = 5
+VERSION = 7
 OUTPUT_TOKENS = 4096
 CHAPTER_RULES = {'W01','W02','W03','W04','W05','W06','W07','W08','SECTION','VOICE','PRESENTATION'}
 
@@ -22,6 +23,7 @@ PROMPT += '''\nW01检查句子在段里的作用。为解释改进建议而简�
 
 
 PROMPT += '''\n步骤节检查“断言”等代码术语是否反复取代实际操作叙述。建议用核对对象、比较方法与必要判定条件说明实际过程。结果分析章逐项检查数据是否导向明确发现；只有陈列图表或复述数值时，引用当前原文，指出相应任务以及能支撑判断的现有比较。总结只归纳分析章已有的结论。'''
+PROMPT += '''\n若提供 calculations，它们是已用原件计算的结果，按其范围与数值核对结论，不重算。指导书要求的指标若缺少必要读数，保留一句事实状态，不用 W01 删去，也不要要求填入替代基准或估算值。数值变化与发生原因是两件事，计算回执只支持该现象和它对指标的影响。'''
 
 PROMPT += "\n" + DEFENSIVE_WRITING_GUIDANCE + "\n" + IMPLEMENTATION_DETAILS_GUIDANCE
 
@@ -84,9 +86,15 @@ def packet(workflow, payload):
         'section_duties':duties,'paragraph_ids':ids,
         'rules':[{'id':r['id'],'level':r.get('level','contextual'),'text':r.get('text') or r.get('check','')} for r in rules],
         'previous_issues':prior,
-        'requirements':[{'id':r['id'],'text':r['text']} for r in p.data.get('requirements',[]) if r.get('required')],
+        'requirements':[{k:r[k] for k in ('id','text','acceptance') if k in r}
+                        for r in p.data.get('requirements',[]) if r.get('required')],
         'user_preferences':p.data.get('report_preferences',{}),
         'notice':'Chapter review covers local rules. Revision continues while progress is made within the task budget; unresolved feedback remains recorded for delivery.'}
+    if payload.get('chapter_scope') and set(payload['chapter_scope'].get('roles', ())) & {'results', 'analysis'}:
+        calculations={c['id']:{k:v for k,v in c.items() if k not in ('pairs','sheet','id')}
+                      for group in payload.get('evidence',{}).get('results',{}).values()
+                      for c in group.get('calculations',[])}
+        if calculations:data['calculations']=list(calculations.values())
     if 'known_issues' in payload:
         data['known_issues']=copy.deepcopy(payload['known_issues'])
         data['notice']+=' For each known issue return resolutions: issue_id, status(resolved|unresolved|recurred|dismissed), block_ids, quote, reason. Resolved requires current text evidence; deleted blocks may use [] and empty quote. Do not omit unresolved issues.'
@@ -115,6 +123,33 @@ def validate_result(result, data):
             quote=issue.get('quote','')
             def text(b):return b.get('text') or b.get('caption') or json.dumps(b.get('rows') or b.get('items') or [],ensure_ascii=False)
             if not quote or not any(quote in text(blocks[bid]) for bid in bids):raise ValueError('hard quote must be continuous current block text')
+
+
+def calibrate_result_status_issues(result, data):
+    """A verified, concise required-result status is valid under W01."""
+    missing = [c for c in data.get('calculations', []) if c.get('status') == 'unavailable'
+               and c.get('metric') == 'normalized_max_deviation'
+               and c.get('reason') == 'required_reference_not_in_observations']
+    if not missing:
+        return result
+    blocks = {b['id']: b for s in data['document']['sections'] for b in s['blocks']}
+    result = copy.deepcopy(result)
+    for issue in result['issues']:
+        if issue.get('rule_id') != 'W01' or issue.get('severity') != 'hard' or len(issue['block_ids']) != 1:
+            continue
+        text = blocks[issue['block_ids'][0]].get('text', '').strip()
+        sentence = issue['quote'].strip()
+        if (len(sentence) > 100 or sentence not in re.split(r'(?<=[。！？])', text)
+                or not re.search(r'非线性误差|归一化最大偏差|相对最大偏差', sentence)
+                or not re.search(r'未记录|未测得|缺少|缺失|没有.{0,8}读数', sentence)
+                or not re.search(r'未计算|未给出|无法计算|无法给出|缺少.{0,8}基准', sentence)
+                or re.search(r'所以还要|因此追加|为了|改用|替代', sentence)):
+            continue
+        if any(re.search(rf'(?<![\d.]){re.escape(format(c["reference_x"], "g"))}(?![\d.])', sentence)
+               for c in missing):
+            issue['severity'] = 'soft'
+            issue['calibration'] = '该句与计算回执中的必交指标缺项一致，保留实际状态，不触发改稿。'
+    return result
 
 
 def run(workflow, payload, original_validator, task_id=None):
@@ -172,6 +207,7 @@ def run(workflow, payload, original_validator, task_id=None):
             'document_hash':fingerprint(payload['document']),'incomplete':True})
         p.save();raise
     finally:workflow.model_factory=factory
+    result=calibrate_result_status_issues(result,data)
     record={'status':'completed','at':now(),'packet':data,'result':result,'source_document_hash':fingerprint(payload['document'])}
     atomic_json(path,record)
     workflow.state.setdefault('lean_reviews',[]).append({'scope':data['scope'],'path':str(path.relative_to(p.root)),
