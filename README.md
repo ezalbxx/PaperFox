@@ -29,11 +29,11 @@
 - **把实验问题说清楚**。纸狐会在出稿前尝试处理措辞等可自行修订的问题。「实验与数据反馈」集中展示缺测、缺少依据的结果和影响结论的数据问题。
 - **保留改稿过程**。在原文上选句讨论，采用改稿后保留新版本，也可以比较历史版本。桌面工作台使用同一套本机报告库。
 
-## 生成效果对比
+## 项目海报
 
-下图并排展示 PaperFox 和 Claude Code 对同一组实验日志的报告原文，从防御性、逻辑组织和用词表达三个维度作对照。两边均使用 DeepSeek Flash，纸狐一栏采用历史成稿。
+[![纸狐 PaperFox 项目海报](docs/assets/paperfox-poster.png)](docs/assets/paperfox-poster.pdf)
 
-[![PaperFox 与 Claude Code 的报告原文与三项写作对比](docs/assets/report-writing-comparison.png)](docs/assets/report-writing-comparison.png)
+[查看原版 PDF](docs/assets/paperfox-poster.pdf)
 
 ## 数据与模型
 
